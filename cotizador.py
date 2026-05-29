@@ -187,7 +187,6 @@ if st.session_state.conceptos:
     pdf = FPDF()
     pdf.add_page()
     
-    # RUTA RELATIVA PARA LA NUBE
     ruta_logo = "logo besco 2026.jpeg"
     if os.path.exists(ruta_logo):
         pdf.image(ruta_logo, x=10, y=5, w=66)
@@ -323,11 +322,14 @@ if st.session_state.conceptos:
     pdf.cell(0, 5, txt=limpiar_texto(puesto_cotizador), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
 
-    pdf_bytes = pdf.output()
+    # AQUÍ ESTÁ LA SOLUCIÓN: Guardamos a un archivo temporal primero, luego leemos los bytes seguros
+    pdf.output("cotizacion_temp.pdf")
+    with open("cotizacion_temp.pdf", "rb") as pdf_file:
+        pdf_bytes = pdf_file.read()
     
     st.download_button(
         label="⚡ Guardar Historial y Descargar PDF",
-        data=bytes(pdf_bytes),
+        data=pdf_bytes, # Pasamos los bytes leídos directamente
         file_name=f"Cotizacion_{numero_presupuesto}.pdf",
         mime="application/pdf",
         use_container_width=True,
