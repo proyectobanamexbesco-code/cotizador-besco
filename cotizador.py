@@ -3,44 +3,83 @@ import pandas as pd
 from datetime import date
 import os
 from fpdf import FPDF
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Configuración inicial de la página
 st.set_page_config(page_title="Generador de Cotizaciones", layout="wide")
 
-# FUNCIÓN MAESTRA: Se ejecuta automáticamente al dar clic en descargar PDF
+# FUNCIÓN MAESTRA: Se ejecuta automáticamente al dar clic en descargar PDF y escribe en Google Sheets
 def callback_guardar_todo(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli, tel_cli, em_cli, cotizador, puesto, em_cot, tel_cot, desc, ubi, sub, iva, tot, moneda, entrega, pago, vig, gar):
-    # RUTA RELATIVA PARA LA NUBE
-    archivo_db = "historial_cotizaciones.csv"
-    
-    df_registro = df.copy()
-    df_registro["Folio"] = folio
-    df_registro["Fecha"] = fecha_cot
-    df_registro["Nombre_Cliente"] = nom_cli
-    df_registro["Institucion"] = inst_cli
-    df_registro["Direccion_Cliente"] = dir_cli
-    df_registro["Telefono_Cliente"] = tel_cli
-    df_registro["Email_Cliente"] = em_cli
-    df_registro["Cotizador"] = cotizador
-    df_registro["Puesto_Cotizador"] = puesto
-    df_registro["Email_Cotizador"] = em_cot
-    df_registro["Telefono_Cotizador"] = tel_cot
-    df_registro["Descripcion_Proyecto"] = desc
-    df_registro["Ubicacion_Servicio"] = ubi
-    df_registro["Subtotal_Cotizacion"] = sub
-    df_registro["IVA_Cotizacion"] = iva
-    df_registro["Total_Cotizacion"] = tot
-    df_registro["Tipo_Moneda"] = moneda
-    df_registro["Tiempo_Entrega"] = entrega
-    df_registro["Condiciones_Pago"] = pago
-    df_registro["Vigencia"] = vig
-    df_registro["Garantia"] = gar
-    
-    if not os.path.exists(archivo_db):
-        df_registro.to_csv(archivo_db, index=False, encoding='utf-8-sig')
-    else:
-        df_registro.to_csv(archivo_db, mode='a', header=False, index=False, encoding='utf-8-sig')
-    
-    st.session_state.mensaje_exito = f"¡Cotización {folio} registrada exitosamente en el historial y PDF descargado!"
+    try:
+        # Limpiar mensajes previos de la memoria antes de procesar
+        if "mensaje_exito" in st.session_state:
+            del st.session_state.mensaje_exito
+        if "mensaje_error" in st.session_state:
+            del st.session_state.mensaje_error
+
+        # 1. Configurar los accesos seguros con las credenciales de Streamlit Secrets
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        credentials_dict = {
+            "type": st.secrets["gcp_service_account"]["type"],
+            "project_id": st.secrets["gcp_service_account"]["project_id"],
+            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+            "private_key": st.secrets["gcp_service_account"]["private_key"],
+            "client_email": st.secrets["gcp_service_account"]["client_email"],
+            "client_id": st.secrets["gcp_service_account"]["client_id"],
+            "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+            "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+        }
+        
+        creds = Credentials.from_service_account_info(credentials_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        # 2. Abrir la hoja por su nombre exacto compartido
+        sheet = client.open("Historial Cotizaciones Besco").sheet1
+        
+        # 3. Preparar e insertar cada renglón de conceptos de forma estructurada
+        for _, fila in df.iterrows():
+            nueva_fila = [
+                str(folio),
+                str(fecha_cot),
+                str(nom_cli),
+                str(inst_cli),
+                str(dir_cli),
+                str(tel_cli),
+                str(em_cli),
+                str(cotizador),
+                str(puesto),
+                str(em_cot),
+                str(tel_cot),
+                str(desc),
+                str(ubi),
+                float(sub),
+                float(iva),
+                float(tot),
+                str(moneda),
+                str(entrega),
+                str(pago),
+                str(vig),
+                str(gar),
+                str(fila["Tipo"]),
+                str(fila["Concepto"]),
+                float(fila["Cant."]),
+                str(fila["Unidad"]),
+                float(fila["Costo U."]),
+                float(fila["Precio Venta"]),
+                float(fila["Importe"])
+            ]
+            sheet.append_row(nueva_fila)
+        
+        st.session_state.mensaje_exito = f"¡Cotización {folio} registrada exitosamente en Google Sheets y PDF descargado!"
+    except Exception as e:
+        st.session_state.mensaje_error = f"Error crítico al conectar con Google Sheets: {str(e)}. Verifica la configuración de Secrets y los permisos de la hoja."
 
 def limpiar_texto(texto):
     if not isinstance(texto, str):
@@ -54,6 +93,7 @@ def limpiar_texto(texto):
         texto = texto.replace(k, v)
     return texto
 
+# Encabezado de la Empresa y Espacio para el Folio (UI Limpia)
 col_header1, col_header2 = st.columns([2, 1])
 with col_header1:
     st.markdown("### Grupo Besco S.A. de C.V.")
@@ -130,6 +170,8 @@ with st.form("agregar_concepto", clear_on_submit=True):
     if submit:
         if "mensaje_exito" in st.session_state:
             del st.session_state.mensaje_exito
+        if "mensaje_error" in st.session_state:
+            del st.session_state.mensaje_error
             
         if concepto.strip() == "":
             st.error("Por favor, escriba una descripción en el concepto antes de agregar.")
@@ -183,6 +225,8 @@ if st.session_state.conceptos:
     st.header("6. Finalizar Cotización")
     if "mensaje_exito" in st.session_state:
         st.success(st.session_state.mensaje_exito)
+    if "mensaje_error" in st.session_state:
+        st.error(st.session_state.mensaje_error)
     
     pdf = FPDF()
     pdf.add_page()
@@ -322,14 +366,14 @@ if st.session_state.conceptos:
     pdf.cell(0, 5, txt=limpiar_texto(puesto_cotizador), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
 
-    # AQUÍ ESTÁ LA SOLUCIÓN: Guardamos a un archivo temporal primero, luego leemos los bytes seguros
+    # Creamos un archivo intermedio seguro
     pdf.output("cotizacion_temp.pdf")
     with open("cotizacion_temp.pdf", "rb") as pdf_file:
         pdf_bytes = pdf_file.read()
     
     st.download_button(
         label="⚡ Guardar Historial y Descargar PDF",
-        data=pdf_bytes, # Pasamos los bytes leídos directamente
+        data=pdf_bytes,
         file_name=f"Cotizacion_{numero_presupuesto}.pdf",
         mime="application/pdf",
         use_container_width=True,
@@ -347,4 +391,6 @@ if st.button("Limpiar Cotización Nueva"):
     st.session_state.conceptos = []
     if "mensaje_exito" in st.session_state:
         del st.session_state.mensaje_exito
+    if "mensaje_error" in st.session_state:
+        del st.session_state.mensaje_error
     st.rerun()
