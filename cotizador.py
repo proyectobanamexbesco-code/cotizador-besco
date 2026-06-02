@@ -1,17 +1,145 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import datetime, date
 import os
+import smtplib
+from email.message import EmailMessage
+import io
+import uuid
+from pypdf import PdfWriter
 from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
-import tempfile
+from PIL import Image
 
-# CRUCIAL: Configuración de página inicial
-st.set_page_config(page_title="Panel Central de Aplicaciones", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA TRUNK (DEBE SER EL PRIMER COMANDO) ---
+st.set_page_config(page_title="Panel Central de Aplicaciones - Grupo Besco", layout="wide")
+
+# --- RESOLUCIÓN Y ENRUTAMIENTO DE LOGOTIPOS ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_LOGO_PATH = r"C:\Users\GerardoMendez\OneDrive - Grupo Besco\Escritorio\MisProyectos\logo.png"
+CLOUD_LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+CLOUD_LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
+CLOUD_LOGO_BESCO = os.path.join(BASE_DIR, "logo besco 2026.jpeg")
+
+if os.path.exists(LOCAL_LOGO_PATH):
+    LOGO_PATH = LOCAL_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_PATH):
+    LOGO_PATH = CLOUD_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_JPG):
+    LOGO_PATH = CLOUD_LOGO_JPG
+elif os.path.exists(CLOUD_LOGO_BESCO):
+    LOGO_PATH = CLOUD_LOGO_BESCO
+else:
+    LOGO_PATH = None
+
+# --- ESTILOS VISUALES CORPORATIVOS ---
+st.markdown("""
+    <style>
+    .stApp { color: #262730 !important; }
+    .stButton > button { color: white !important; background-color: #E21836 !important; }
+    h1, h2, h3 { color: #1E3A5F !important; }
+    div[data-testid="stExpander"] div[role="button"] p { font-weight: bold !important; color: #1E3A5F !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ==========================================
-# FUNCIONES AUXILIARES GLOBALES
+# CLASES ESPECIALIZADAS (REPORTE FOTOGRÁFICO)
+# ==========================================
+class BESCO_PDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.section_count = 1
+        self.set_auto_page_break(auto=True, margin=20)
+
+    def header(self):
+        if LOGO_PATH and os.path.exists(LOGO_PATH):
+            try:
+                img_logo = Image.open(LOGO_PATH).convert("RGB")
+                temp_logo = "temp_logo_principal.jpg"
+                img_logo.save(temp_logo, format="JPEG")
+                
+                orig_w, orig_h = img_logo.size
+                final_h = 25
+                escala = final_h / orig_h
+                final_w = orig_w * escala
+                
+                self.image(temp_logo, x=10, y=8, w=final_w, h=final_h)
+            except Exception:
+                self.set_font('Arial', 'I', 8)
+                self.set_xy(10, 10)
+                self.cell(0, 10, f"(Error al procesar logo)")
+                
+        self.set_font('Arial', 'B', 12)
+        self.set_text_color(30, 58, 95)
+        self.set_xy(100, 15)
+        self.cell(0, 10, 'REPORTE DE SERVICIO TÉCNICO - BESCO', 0, 1, 'R')
+        self.set_font('Arial', '', 9)
+        self.set_x(100)
+        self.cell(0, 5, f"Emisión del Reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R')
+        self.ln(12)
+
+    def add_custom_section(self, title):
+        if self.get_y() > 250:
+            self.add_page()
+        self.set_fill_color(30, 58, 95)
+        self.set_font('Arial', 'B', 11)
+        self.set_text_color(255, 255, 255)
+        self.cell(0, 8, f"{self.section_count}. {title.upper()}", 0, 1, 'L', fill=True)
+        self.section_count += 1
+        self.ln(2)
+        self.set_text_color(0, 0, 0)
+
+    def photo_grid(self, title, photos, eq_index=0, prefix="img"):
+        if not photos: return
+        
+        if self.get_y() > 240:
+            self.add_page()
+            
+        self.add_custom_section(title)
+        ancho_foto, alto_foto, espacio_v = 90, 65, 72
+        
+        for i, foto in enumerate(photos):
+            foto.seek(0)
+            img = Image.open(foto).convert("RGB")
+            temp_p = f"temp_{prefix}_{uuid.uuid4().hex}.jpg"
+            img.save(temp_p, format="JPEG")
+            
+            col = i % 2
+            
+            if col == 0 and (self.get_y() + alto_foto > 265):
+                self.add_page()
+                self.set_font('Arial', 'I', 9)
+                self.set_text_color(100, 100, 100)
+                self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
+                self.set_text_color(0, 0, 0)
+                self.ln(2)
+                
+            y_act = self.get_y()
+            self.image(temp_p, x=10 + (col * 95), y=y_act, w=ancho_foto, h=alto_foto)
+            
+            if col == 1 or i == len(photos) - 1:
+                self.set_y(y_act + espacio_v)
+        self.ln(2)
+
+    def folio_grid(self, title, photo_files):
+        if not photo_files: return
+        for i, foto in enumerate(photo_files[:4]):
+            self.add_page()
+            self.add_custom_section(f"{title} - Evidencia {i+1}")
+            foto.seek(0)
+            img = Image.open(foto).convert("RGB")
+            temp_folio = f"temp_folio_{uuid.uuid4().hex}.jpg"
+            img.save(temp_folio, format="JPEG")
+            
+            avail_w, avail_h = 190, 240
+            img_w, img_h = img.size
+            escala = min(avail_w/img_w, avail_h/img_h)
+            final_w, final_h = img_w * escala, img_h * escala
+            self.image(temp_folio, x=10 + (190 - final_w) / 2, y=self.get_y() + 5, w=final_w, h=final_h)
+
+# ==========================================
+# FUNCIONES OPERATIVAS MIGRADAS
 # ==========================================
 def limpiar_texto(texto):
     if not isinstance(texto, str):
@@ -60,8 +188,33 @@ def callback_guardar_cotizacion(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli
     except Exception as e:
         st.session_state.mensaje_error = f"Error al conectar con Google Sheets: {str(e)}"
 
+def enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nombre_archivo, corr_extra, f_ejec, destinatarios_base):
+    try:
+        if "EMAIL_SENDER" not in st.secrets or "EMAIL_PASSWORD" not in st.secrets:
+            st.error("❌ Error de configuración: Faltan credenciales 'EMAIL_SENDER' o 'EMAIL_PASSWORD' en Secrets.")
+            return False
+
+        remitente = st.secrets["EMAIL_SENDER"]
+        password = st.secrets["EMAIL_PASSWORD"]
+        destinatarios = list(set(destinatarios_base + ([c.strip() for c in corr_extra.split(",")] if corr_extra else [])))
+
+        msg = EmailMessage()
+        msg['Subject'] = f"Reporte Fotográfico BESCO: {cliente} | TK: {folio} | Of: {office}"
+        msg['From'] = remitente
+        msg['To'] = ", ".join(destinatarios) 
+        msg.set_content(f"Se ha generado un nuevo reporte desde el Sistema de Evidencia Técnica BESCO.\n\nFecha Ejecución: {f_ejec}\nOficina: {office}\nCliente: {cliente}\nFolio: {folio}\nSucursal: {sucursal}")
+        msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(remitente, password)
+            smtp.send_message(msg)
+        return True
+    except Exception as e:
+        st.error(f"❌ Error de conexión SMTP: {e}")
+        return False
+
 # ==========================================
-# CONTROL DE NAVEGACIÓN
+# GESTIÓN DE INTERFAZ Y FLUJOS (NAVEGACIÓN)
 # ==========================================
 if 'app_actual' not in st.session_state:
     st.session_state.app_actual = "Menu"
@@ -71,39 +224,39 @@ def cambiar_pantalla(nombre_app):
     st.rerun()
 
 with st.sidebar:
-    st.markdown("### 🛠️ Menú de Navegación")
+    st.markdown("### 🛠️ Menú de Aplicaciones")
     if st.button("🏠 Inicio (Panel Central)", use_container_width=True): cambiar_pantalla("Menu")
     st.divider()
     if st.button("📄 Cotizador Industrial", use_container_width=True): cambiar_pantalla("Cotizaciones")
-    if st.button("📸 Evidencia Técnica", use_container_width=True): cambiar_pantalla("Reportes")
+    if st.button("📸 Evidencia Técnica BESCO", use_container_width=True): cambiar_pantalla("Reportes")
     if st.button("🚀 Próxima Aplicación", use_container_width=True): cambiar_pantalla("OtraApp")
 
 # ==========================================
-# 1. PANTALLA PRINCIPAL: MENÚ
+# VISTA 1: MENÚ CENTRAL (EL APARTADO ANTES)
 # ==========================================
 if st.session_state.app_actual == "Menu":
     st.title("💼 Panel Integrado de Soluciones - Grupo Besco")
-    st.markdown("Selecciona la herramienta automatizada que deseas desplegar:")
+    st.markdown("Selecciona la herramienta operativa que deseas desplegar:")
     st.divider()
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("### 📄 Cotizador Industrial")
-        st.caption("Cálculo de márgenes, diseño adaptivo en PDF y guardado permanente en Google Sheets.")
+        st.caption("Cálculo dinámico de utilidades, protección anti-empalmes en PDF y guardado centralizado en Google Sheets.")
         if st.button("Desplegar Cotizador", key="btn_cot", use_container_width=True, type="primary"): cambiar_pantalla("Cotizaciones")
     with col2:
-        st.markdown("### 📸 Evidencia Técnica")
-        st.caption("Sistema de Evidencia Técnica Alducin. Reportes fotográficos de campo y mantenimiento.")
-        if st.button("Desplegar Reportes", key="btn_rep", use_container_width=True, type="primary"): cambiar_pantalla("Reportes")
+        st.markdown("### 📸 Evidencia Técnica BESCO")
+        st.caption("Sistema de Evidencia Técnica Alducin. Carga múltiple de imágenes, fusión de reportes PDF y envío por correo electrónico.")
+        if st.button("Desplegar Herramienta de Campo", key="btn_rep", use_container_width=True, type="primary"): cambiar_pantalla("Reportes")
     with col3:
         st.markdown("### 🚀 Próxima Aplicación")
-        st.caption("Módulo en reserva para la integración de futuros flujos de trabajo operativos.")
+        st.caption("Módulo en reserva listo para recibir la lógica de tus siguientes flujos automatizados.")
         if st.button("Desplegar Nueva App", key="btn_otra", use_container_width=True): cambiar_pantalla("OtraApp")
 
 # ==========================================
-# 2. APP DE COTIZACIONES
+# VISTA 2: COTIZADOR INDUSTRIAL
 # ==========================================
 elif st.session_state.app_actual == "Cotizaciones":
-    if st.button("⬅️ Volver al Panel Principal", key="v_cot"): cambiar_pantalla("Menu")
+    if st.button("静态 ⬅️ Volver al Panel Principal", key="v_cot"): cambiar_pantalla("Menu")
     col_h1, col_h2 = st.columns([2, 1])
     with col_h1:
         st.markdown("### Grupo Besco S.A. de C.V.")
@@ -179,13 +332,12 @@ elif st.session_state.app_actual == "Cotizaciones":
         if st.button("Limpiar Tablas", key="clear_cot"):
             st.session_state.conceptos = []; st.rerun()
 
-        # GENERACIÓN DEL PDF INTELIGENTE
         if "mensaje_exito" in st.session_state: st.success(st.session_state.mensaje_exito)
         if "mensaje_error" in st.session_state: st.error(st.session_state.mensaje_error)
         
         pdf = FPDF()
         pdf.add_page()
-        if os.path.exists("logo besco 2026.jpeg"): pdf.image("logo besco 2026.jpeg", x=10, y=5, w=66)
+        if LOGO_PATH and os.path.exists(LOGO_PATH): pdf.image(LOGO_PATH, x=10, y=5, w=66)
         pdf.set_fill_color(230, 230, 230); pdf.rect(10, 35, 190, 32, 'DF')
         pdf.set_y(37); pdf.set_font("Helvetica", "B", 10); pdf.cell(110, 5, "Grupo Besco S.A. de C.V."); pdf.cell(80, 5, f"Fecha: {fecha.strftime('%d/%m/%Y')}", ln=True, align="R")
         pdf.cell(110, 5, "Jose Ignacio Bartolache 1910, CDMX"); pdf.cell(80, 5, f"No. Presupuesto: {numero_presupuesto}", ln=True, align="R")
@@ -230,11 +382,11 @@ elif st.session_state.app_actual == "Cotizaciones":
         pdf.ln(4); pdf.set_font("Helvetica", "B", 9); pdf.cell(0, 5, "CONDICIONES COMERCIALES:", ln=True)
         pdf.set_font("Helvetica", size=8)
         pdf.cell(0, 4, f"- Moneda: {limpiar_texto(tipo_moneda)} | Tiempo de Entrega: {limpiar_texto(tiempo_entrega)}", ln=True)
-        pdf.cell(0, 4, f"- Pago: {limpiar_texto(condiciones_pago)} | Vigencia: {limpiar_texto(vigencia)} | Garantia: {limpiar_texto(garantia)}", ln=True)
+        pdf.cell(0, 4, f"- Pago: {limpiar_texto(condiciones_pago)} | Vigencia: {limpiar_texto(vigencia)} | Garantía: {limpiar_texto(garantia)}", ln=True)
         
         pdf.ln(3); pdf.set_font("Helvetica", "B", 6); pdf.cell(0, 3, "NOTAS IMPORTANTES:", ln=True)
         pdf.set_font("Helvetica", size=5.5)
-        pdf.multi_cell(0, 3, "- Trabajos extraordinarios o refacciones se cobraran por separado.\n- Precios basados en costos actuales; variaciones comprobables del mercado seran notificadas al cliente para ajuste.")
+        pdf.multi_cell(0, 3, "- Trabajos extraordinarios o refacciones se cobrarán por separado.\n- Precios basados en costos actuales; variaciones comprobables del mercado serán notificadas al cliente para ajuste.")
         
         pdf.ln(4); pdf.set_font("Helvetica", "B", 9); pdf.cell(0, 4, "ATENTAMENTE", ln=True, align="C")
         pdf.set_text_color(0, 112, 192); pdf.cell(0, 4, nombre_cotizador.upper(), ln=True, align="C")
@@ -250,95 +402,81 @@ elif st.session_state.app_actual == "Cotizaciones":
         )
 
 # ==========================================
-# 3. APP DE REPORTES FOTOGRÁFICOS
+# VISTA 3: EVIDENCIA TÉCNICA BESCO (ORIGINAL)
 # ==========================================
 elif st.session_state.app_actual == "Reportes":
     if st.button("⬅️ Volver al Panel Principal", key="v_rep"): cambiar_pantalla("Menu")
-    st.title("📸 Sistema de Evidencia Técnica Alducin")
-    st.subheader("Módulo de Reportes Fotográficos Industriales")
-    st.divider()
-    
-    with st.form("form_evidencia"):
-        st.markdown("#### 🛠️ Datos de Inspección de Campo")
-        col_r1, col_r2 = st.columns(2)
-        tecnico = col_r1.text_input("Técnico Responsable", value="Gerardo Méndez")
-        cliente_rep = col_r1.text_input("Cliente / Empresa")
-        fecha_rep = col_r2.date_input("Fecha del Servicio", date.today())
-        ot = col_r2.text_input("Orden de Trabajo (OT)")
-        equipo = st.text_input("Equipo Evaluado (Modelo / Ubicación)")
-        
-        st.markdown("#### 🖼️ Captura de Evidencia Fotográfica")
-        foto1 = st.file_uploader("Fotografía de Evidencia 1", type=["jpg", "jpeg", "png"])
-        desc1 = st.text_input("Descripción / Hallazgo Fotografía 1")
-        st.divider()
-        foto2 = st.file_uploader("Fotografía de Evidencia 2", type=["jpg", "jpeg", "png"])
-        desc2 = st.text_input("Descripción / Hallazgo Fotografía 2")
-        st.divider()
-        observaciones_rep = st.text_area("Diagnóstico Técnico General / Conclusiones")
-        
-        generar_reporte = st.form_submit_button("💥 Generar y Descargar Reporte Fotográfico")
-        
-        if generar_reporte:
-            if not cliente_rep or not equipo:
-                st.error("Por favor completa los campos mínimos (Cliente y Equipo).")
-            else:
-                pdf_rep = FPDF()
-                pdf_rep.add_page()
-                if os.path.exists("logo besco 2026.jpeg"): pdf_rep.image("logo besco 2026.jpeg", x=10, y=5, w=66)
-                
-                pdf_rep.set_y(35); pdf_rep.set_font("Helvetica", "B", 13); pdf_rep.set_text_color(0, 112, 192)
-                pdf_rep.cell(0, 6, "SISTEMA DE EVIDENCIA TECNICA ALDUCIN", ln=True, align="C")
-                pdf_rep.set_font("Helvetica", "B", 11); pdf_rep.set_text_color(0, 0, 0)
-                pdf_rep.cell(0, 5, "REPORTES OPERATIVOS DE AIRE ACONDICIONADO INDUSTRIAL", ln=True, align="C")
-                
-                pdf_rep.ln(4); pdf_rep.set_fill_color(245, 245, 245); pdf_rep.rect(10, pdf_rep.get_y(), 190, 24, 'DF')
-                pdf_rep.set_font("Helvetica", "B", 9)
-                pdf_rep.cell(95, 5, f" Tecnico: {limpiar_texto(tecnico)}"); pdf_rep.cell(95, 5, f"Fecha: {fecha_rep.strftime('%d/%m/%Y')}", ln=True)
-                pdf_rep.cell(95, 5, f" Cliente: {limpiar_texto(cliente_rep)}"); pdf_rep.cell(95, 5, f"OT: {limpiar_texto(ot)}", ln=True)
-                pdf_rep.cell(0, 5, f" Equipo/Ubicacion: {limpiar_texto(equipo)}", ln=True)
-                
-                pdf_rep.set_y(70)
-                # Procesar Foto 1
-                if foto1:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t1:
-                        t1.write(foto1.read()); path1 = t1.name
-                    pdf_rep.set_font("Helvetica", "B", 10); pdf_rep.cell(0, 5, "Evidencia Fotográfica #1:", ln=True)
-                    try: pdf_rep.image(path1, x=15, y=pdf_rep.get_y()+2, w=85); pdf_rep.set_y(pdf_rep.get_y() + 68)
-                    except: pdf_rep.cell(0, 5, "[Error al cargar imagen 1]", ln=True)
-                    pdf_rep.set_font("Helvetica", size=9); pdf_rep.multi_cell(0, 4, f"Descripcion: {limpiar_texto(desc1)}"); pdf_rep.ln(4)
-                    try: os.unlink(path1)
-                    except: pass
-                
-                # Procesar Foto 2
-                if foto2:
-                    if pdf_rep.get_y() > 190: pdf_rep.add_page()
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t2:
-                        t2.write(foto2.read()); path2 = t2.name
-                    pdf_rep.set_font("Helvetica", "B", 10); pdf_rep.cell(0, 5, "Evidencia Fotográfica #2:", ln=True)
-                    try: pdf_rep.image(path2, x=15, y=pdf_rep.get_y()+2, w=85); pdf_rep.set_y(pdf_rep.get_y() + 68)
-                    except: pdf_rep.cell(0, 5, "[Error al cargar imagen 2]", ln=True)
-                    pdf_rep.set_font("Helvetica", size=9); pdf_rep.multi_cell(0, 4, f"Descripcion: {limpiar_texto(desc2)}"); pdf_rep.ln(4)
-                    try: os.unlink(path2)
-                    except: pass
-                
-                # Diagnóstico Final
-                if observaciones_rep:
-                    if pdf_rep.get_y() > 220: pdf_rep.add_page()
-                    pdf_rep.ln(3); pdf_rep.set_font("Helvetica", "B", 10); pdf_rep.cell(0, 5, "DIAGNOSTICO Y RECOMENDACIONES GENERALES:", ln=True)
-                    pdf_rep.set_font("Helvetica", size=9); pdf_rep.multi_cell(0, 4, limpiar_texto(observaciones_rep))
-                
-                pdf_rep.output("reporte_foto_temp.pdf")
-                with open("reporte_foto_temp.pdf", "rb") as f_rep: bytes_rep = f_rep.read()
-                
-                st.download_button(label="📥 Descargar Reporte Fotográfico PDF", data=bytes_rep, file_name=f"Reporte_Evidencia_{ot if ot else 'Inspeccion'}.pdf", mime="application/pdf", use_container_width=True)
-                st.success("¡Reporte listo! Haz clic en el botón de descarga que apareció arriba.")
+    if LOGO_PATH is None:
+        st.warning("⚠️ Advertencia: No se encontró el archivo del logotipo en GitHub. El PDF se generará sin logotipo.")
 
-# ==========================================
-# 4. PRÓXIMA APLICACIÓN
-# ==========================================
-elif st.session_state.app_actual == "OtraApp":
-    if st.button("⬅️ Volver al Panel Principal", key="v_otra"): cambiar_pantalla("Menu")
-    st.title("🚀 Módulo en Desarrollo")
-    st.subheader("Espacio reservado para tu siguiente automatización")
-    st.divider()
-    st.warning("Esta sección está completamente lista y enrutada. En cuanto definas el siguiente flujo operativo, programaremos las acciones aquí dentro.")
+    st.title("📑 Sistema de Evidencia Técnica BESCO")
+
+    st.subheader("1. Identificación General del Servicio")
+    c_g1, c_g2, c_g3 = st.columns([2, 1, 1.5])
+    cliente = c_g1.text_input("Cliente")
+    folio = c_g2.text_input("Folio / OT / TK", max_chars=20)
+    fecha_ejecucion = c_g3.date_input("Fecha de Ejecución", datetime.now())
+
+    col_loc1, col_loc2 = st.columns(2)
+    sucursal = col_loc1.text_input("Sucursal / Inmueble")
+
+    lista_oficinas = [
+        "Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", 
+        "Ben & Company", "BX+", "Emerson", "Odoo", "Tampico"
+    ]
+    oficina = col_loc2.selectbox("Oficina Responsable", lista_oficinas)
+
+    c_t1, c_t2, c_t3, c_t4 = st.columns(4)
+    tecnico = c_t1.text_input("Técnico Asignado")
+    supervisor = c_t2.text_input("Supervisor")
+    tipo_serv = c_t3.selectbox("Servicio", ["Preventivo", "Correctivo", "Emergencia"])
+    referencia = c_t4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
+
+    st.markdown("---")
+    st.subheader("2. Evidencia Documental (Reporte Físico)")
+    st.info("📌 Puede subir hasta 4 fotos (JPG/PNG) y/o archivos PDF del reporte firmado.")
+    archivos_folio = st.file_uploader("Subir Folio BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
+
+    st.markdown("---")
+    st.subheader("3. Equipos a Reportar")
+    num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
+
+    leyendas_default = {
+        "Conservación": "SE REALIZA REAPRIETE DE TORNILLERIA Y LUBRICACIÓN DE CHAPAS, BISAGRAS, SE HACE REVISIÓN DE ESTADO DE PINTURA, PISOS EXTINTORES Y MOBILIARIO.",
+        "Hidrosanitario": "SE REALIZA REVISIÓN DE CESPOL, MEZCLADORA, MANGUERAS, LLAVES, WC, DESPACHADORES, EXTRACTORES Y CONEXIONES, SE DEJA FUNCIONANDO CORRECTAMENTE.",
+        "Tableros Eléctricos": "SE REALIZA LIMPIEZA, REAPRIETE DE TORNILLERIA, TOMA DE AMPERAJES Y VOLTAJES, SE DEJA FUNCIONANDO CORRECTAMENTE.",
+        "Iluminación": "SE REALIZA REVISIÓN GENERAL DE LÁMPARAS, SE CAMBIAN LAMPARAS FUNDIDAS, SE DEJA FUNCIONANDO CORRECTAMENTE.",
+        "Aire Acondicionado": "SE REALIZA LIMPIEZA GENERAL DE SERPENTINES, TOMADO PRESIÓN DE REFRIGERANTE, VOLTAJES, AMPERAJES, REAPRIRTE DE CONEXIONES, LIMPIEZA DE FILTROS, SE DEJA FUNCIONANDO CORRECTAMENTE."
+    }
+
+    equipos_data = []
+    for i in range(num_equipos):
+        with st.expander(f"CONFIGURACIÓN EQUIPO {i+1}", expanded=True):
+            cols_cat = st.columns(2)
+            categorias_opciones = ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Conservación", "Hidrosanitario", "Iluminación", "Otros"]
+            esp = cols_cat[0].selectbox("Categoría", categorias_opciones, key=f"esp_{i}")
+            estatus = cols_cat[1].selectbox("Estatus Final", ["Operando correctamente", "Operando con observaciones", "No queda operando"], key=f"est_{i}")
+            
+            meds, otros = {}, ""
+            if esp == "Aire Acondicionado":
+                cols = st.columns(4)
+                meds['Succión'] = cols[0].text_input("Succión", key=f"s_{i}")
+                meds['Descarga'] = cols[1].text_input("Descarga", key=f"d_{i}")
+                meds['Salida'] = cols[2].text_input("Salida", key=f"t_{i}")
+                meds['Amperaje'] = cols[3].text_input("Amp", key=f"a_{i}")
+            elif esp == "Otros":
+                otros = st.text_area("Detalles/Mediciones:", key=f"o_{i}")
+                
+            ca1, ca2, ca3 = st.columns(3)
+            tag = ca1.text_input("TAG", key=f"tg_{i}")
+            marca = ca2.text_input("Marca", key=f"mr_{i}")
+            cap = ca3.text_input("Capacidad", key=f"cp_{i}")
+            
+            texto_defecto = leyendas_default.get(esp, "")
+            actividades = st.text_area("Actividades Realizadas", value=texto_defecto, height=80, key=f"act_{i}_{esp}")
+            com = st.text_area("Comentarios Extras", key=f"com_{i}")
+            
+            fa = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}")
+            fd = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
+            
+            equipos_data
