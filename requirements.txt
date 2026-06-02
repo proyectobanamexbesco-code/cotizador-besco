@@ -4,3 +4,4 @@ fpdf
 gspread
 google-auth
 Pillow
+pypdf
