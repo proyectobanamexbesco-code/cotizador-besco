@@ -325,7 +325,7 @@ if st.session_state.conceptos:
     pdf.cell(25, 7, txt="Precio U.", border=1, ln=False, fill=True, align="R")
     pdf.cell(25, 7, txt="Importe", border=1, ln=True, fill=True, align="R")
     
-    # SISTEMA DINÁMICO DE ALTURAS PARA TABLA
+    # SISTEMA DINÁMICO DE ALTURAS PARA TABLA (ALINEACIÓN SUPERIOR LIMPIA)
     pdf.set_font("Helvetica", size=8)
     for _, fila in df_editado.iterrows():
         # Prevenir cortes de hoja a mitad de un renglón
@@ -337,26 +337,43 @@ if st.session_state.conceptos:
         
         texto_tipo = limpiar_texto(fila["Tipo"])
         texto_concepto = limpiar_texto(fila["Concepto"])
+        texto_unidad = limpiar_texto(fila["Unidad"])
         
-        # 1. Medimos el alto real que va a ocupar el Concepto
-        pdf.set_xy(x_start + 30, y_start)
-        pdf.multi_cell(75, 5, txt=texto_concepto, border=0, align="L")
-        row_height = pdf.get_y() - y_start
+        # Margen superior para que el texto respire y no toque la línea
+        y_text = y_start + 1.5 
         
-        if row_height < 6:
-            row_height = 6
+        # 1. Imprimimos los bloques de texto alineados a la parte superior y medimos sus alturas
+        pdf.set_xy(x_start, y_text)
+        pdf.multi_cell(30, 4, txt=texto_tipo, border=0, align="L")
+        alto_tipo = pdf.get_y()
+        
+        pdf.set_xy(x_start + 30, y_text)
+        pdf.multi_cell(75, 4, txt=texto_concepto, border=0, align="L")
+        alto_concepto = pdf.get_y()
+        
+        # Ahora la Unidad también es dinámica y evitará empalmes si el nombre es largo
+        pdf.set_xy(x_start + 120, y_text)
+        pdf.multi_cell(20, 4, txt=texto_unidad, border=0, align="C")
+        alto_unidad = pdf.get_y()
+        
+        # 2. Encontramos la altura máxima necesaria para este renglón
+        y_max = max(alto_tipo, alto_concepto, alto_unidad)
+        row_height = (y_max - y_start) + 1.5 # Añadimos margen inferior
+        
+        if row_height < 7:
+            row_height = 7
             
-        # 2. Imprimimos el resto de las columnas usando el nuevo alto
-        pdf.set_xy(x_start, y_start)
-        pdf.multi_cell(30, 5, txt=texto_tipo, border=0, align="L")
+        # 3. Imprimimos los números alineados arriba para que se vean organizados
+        pdf.set_xy(x_start + 105, y_text)
+        pdf.cell(15, 4, txt=f"{fila['Cant.']:.2f}", border=0, align="C")
         
-        pdf.set_xy(x_start + 105, y_start)
-        pdf.cell(15, row_height, txt=f"{fila['Cant.']:.2f}", border=0, align="C")
-        pdf.cell(20, row_height, txt=limpiar_texto(fila["Unidad"]), border=0, align="C")
-        pdf.cell(25, row_height, txt=f"${fila['Precio Venta']:.2f}", border=0, align="R")
-        pdf.cell(25, row_height, txt=f"${fila['Importe']:.2f}", border=0, align="R")
+        pdf.set_xy(x_start + 140, y_text)
+        pdf.cell(25, 4, txt=f"${fila['Precio Venta']:.2f}", border=0, align="R")
         
-        # 3. Dibujamos los marcos alrededor
+        pdf.set_xy(x_start + 165, y_text)
+        pdf.cell(25, 4, txt=f"${fila['Importe']:.2f}", border=0, align="R")
+        
+        # 4. Dibujamos los bordes exactos
         pdf.rect(x_start, y_start, 30, row_height)
         pdf.rect(x_start + 30, y_start, 75, row_height)
         pdf.rect(x_start + 105, y_start, 15, row_height)
@@ -364,7 +381,7 @@ if st.session_state.conceptos:
         pdf.rect(x_start + 140, y_start, 25, row_height)
         pdf.rect(x_start + 165, y_start, 25, row_height)
         
-        # 4. Bajamos el cursor para el siguiente renglón
+        # 5. Preparamos el cursor para el siguiente renglón
         pdf.set_y(y_start + row_height)
         
     pdf.ln(5)
