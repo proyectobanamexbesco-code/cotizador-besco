@@ -479,4 +479,124 @@ elif st.session_state.app_actual == "Reportes":
             fa = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}")
             fd = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
             
-            equipos_data
+            equipos_data.append({
+                "numero": i+1, "esp": esp, "estatus": estatus, "actividades": actividades, 
+                "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, 
+                "com": com, "fa": fa, "fd": fd
+            })
+
+    st.subheader("4. Materiales Utilizados")
+    df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
+
+    st.markdown("---")
+    st.subheader("5. Envío de Reporte")
+
+    mapeo_correos = {
+        "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
+        "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
+        "Pachuca": ["german.constantino@besco.mx"],
+        "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
+        "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
+        "CDMX": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+        "Ben & Company": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+        "BX+": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+        "Emerson": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+        "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"],
+        "Tampico": ["ingrid.lucio@besco.mx", "joel.perez@besco.mx", "gerardo.mendez@besco.mx"]
+    }
+
+    dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
+    if "gerardo.mendez@besco.mx" not in dest_oficina: 
+        dest_oficina.append("gerardo.mendez@besco.mx")
+
+    st.info(f"📧 Destinatarios automáticos: {', '.join(dest_oficina)}")
+    correos_extra = st.text_input("Correos adicionales (separados por coma)")
+
+    if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
+        with st.spinner("Construyendo documento PDF y procesando imágenes..."):
+            pdf_reporte = BESCO_PDF()
+            pdf_reporte.add_page()
+            
+            pdf_reporte.add_custom_section("Información General")
+            pdf_reporte.set_font('Arial', '', 10)
+            pdf_reporte.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
+            f_ejec_str = fecha_ejecucion.strftime('%d/%m/%Y')
+            pdf_reporte.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
+            if sucursal: pdf_reporte.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
+            pdf_reporte.set_font('Arial', 'B', 10)
+            pdf_reporte.cell(0, 7, f"Técnico: {tecnico} | Supervisor: {supervisor}", 0, 1)
+            pdf_reporte.set_font('Arial', '', 10)
+            pdf_reporte.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf_reporte.ln(5)
+
+            for eq in equipos_data:
+                if pdf_reporte.get_y() > 240: pdf_reporte.add_page()
+                pdf_reporte.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
+                
+                pdf_reporte.set_font('Arial', 'B', 10)
+                pdf_reporte.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
+                pdf_reporte.set_font('Arial', '', 10)
+                
+                valid_meds = {k: v for k, v in eq['meds'].items() if v}
+                for k, v in valid_meds.items(): 
+                    pdf_reporte.cell(60, 6, f"{k}:", 1)
+                    pdf_reporte.cell(130, 6, f"{v}", 1, 1)
+                if eq['otros']: 
+                    pdf_reporte.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
+                    
+                if eq['tag'] or eq['marca'] or eq['cap']: 
+                    pdf_reporte.set_font('Arial', 'B', 9)
+                    pdf_reporte.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
+                    pdf_reporte.set_font('Arial', '', 10)
+                
+                if eq['actividades']:
+                    pdf_reporte.multi_cell(0, 6, f"Actividades Realizadas:\n{eq['actividades']}", 1)
+                if eq['com']: 
+                    pdf_reporte.multi_cell(0, 6, f"Comentarios Extras:\n{eq['com']}", 1)
+                    
+                pdf_reporte.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'], "antes")
+                pdf_reporte.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'], "despues")
+                pdf_reporte.ln(5)
+
+            df_c = df_mat.dropna(subset=["Descripción"])
+            if not df_c.empty:
+                if pdf_reporte.get_y() > 220: pdf_reporte.add_page()
+                pdf_reporte.add_custom_section("Materiales Utilizados")
+                pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(30, 7, "CANT.", 1, 0, 'C'); pdf_reporte.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C'); pdf_reporte.set_font('Arial', '', 9)
+                for _, row in df_c.iterrows(): pdf_reporte.cell(30, 7, str(row["Cantidad"]), 1); pdf_reporte.cell(160, 7, str(row["Descripción"]), 1, 1)
+
+            fotos_folio = [f for f in archivos_folio if f and "image" in f.type]
+            if fotos_folio: 
+                pdf_reporte.folio_grid("FOLIO BESCO", fotos_folio)
+
+            pdf_bytes = pdf_reporte.output(dest='S').encode('latin-1')
+
+            pdfs_folio = [f for f in archivos_folio if f and f.type == "application/pdf"]
+            if pdfs_folio:
+                merger = PdfWriter()
+                merger.append(io.BytesIO(pdf_bytes))
+                for p in pdfs_folio: 
+                    p.seek(0) 
+                    merger.append(p)
+                out = io.BytesIO()
+                merger.write(out)
+                pdf_bytes = out.getvalue()
+
+            nom_archivo = f"Reporte_BESCO_{cliente}_{folio}.pdf".replace(" ", "_")
+            correo_enviado = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nom_archivo, correos_extra, f_ejec_str, dest_oficina)
+            
+            if correo_enviado:
+                st.success("✅ Reporte enviado exitosamente y listo para descargar.")
+            else:
+                st.warning("⚠️ El PDF se generó correctamente, pero hubo un problema de envío. Descárgalo aquí abajo:")
+            
+            st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
+
+# ==========================================
+# VISTA 4: MÓDULO EN RESERVA (OTRA APP)
+# ==========================================
+elif st.session_state.app_actual == "OtraApp":
+    if st.button("⬅️ Volver al Panel Principal", key="v_otra"): cambiar_pantalla("Menu")
+    st.title("🚀 Módulo en Desarrollo")
+    st.subheader("Espacio reservado para tu siguiente automatización")
+    st.divider()
+    st.warning("Esta sección está completamente lista y enrutada. En cuanto definas el siguiente flujo operativo, programaremos las acciones aquí dentro.")
