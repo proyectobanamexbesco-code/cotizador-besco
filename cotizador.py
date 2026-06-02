@@ -12,13 +12,11 @@ st.set_page_config(page_title="Generador de Cotizaciones", layout="wide")
 # FUNCIÓN MAESTRA: Se ejecuta automáticamente al dar clic en descargar PDF y escribe en Google Sheets
 def callback_guardar_todo(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli, tel_cli, em_cli, cotizador, puesto, em_cot, tel_cot, desc, ubi, sub, iva, tot, moneda, entrega, pago, vig, gar):
     try:
-        # Limpiar mensajes previos de la memoria antes de procesar
         if "mensaje_exito" in st.session_state:
             del st.session_state.mensaje_exito
         if "mensaje_error" in st.session_state:
             del st.session_state.mensaje_error
 
-        # 1. Configurar los accesos seguros con las credenciales de Streamlit Secrets
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
@@ -40,10 +38,8 @@ def callback_guardar_todo(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli, tel_
         creds = Credentials.from_service_account_info(credentials_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
-        # 2. Abrir la hoja por su nombre exacto compartido
         sheet = client.open("Historial Cotizaciones Besco").sheet1
         
-        # 3. Preparar e insertar cada renglón de conceptos de forma estructurada
         for _, fila in df.iterrows():
             nueva_fila = [
                 str(folio),
@@ -282,18 +278,45 @@ if st.session_state.conceptos:
     pdf.cell(100, 5, txt="PRESUPUESTO PARA (CLIENTE):", ln=False)
     pdf.cell(0, 5, txt="DATOS DEL PROYECTO:", ln=True)
     
+    # SISTEMA DINÁMICO DE ALTURAS PARA CABECERA
     pdf.set_font("Helvetica", size=9)
-    pdf.cell(100, 5, txt=f"Nombre: {limpiar_texto(nombre_cliente)}", ln=False)
-    pdf.cell(0, 5, txt=f"Proyecto: {limpiar_texto(descripcion_cotizacion)}", ln=True)
-    pdf.cell(100, 5, txt=f"Institucion: {limpiar_texto(institucion_cliente)}", ln=False)
-    pdf.cell(0, 5, txt=f"Ubicacion: {limpiar_texto(ubicacion)}", ln=True)
-    pdf.cell(100, 5, txt=f"Direccion: {limpiar_texto(direccion_cliente)}", ln=False)
-    pdf.cell(0, 5, txt=f"Tel. Cotizador: {limpiar_texto(telefono_cotizador)}", ln=True)
-    pdf.cell(100, 5, txt=f"Telefono: {limpiar_texto(telefono_cliente)}", ln=True)
-    pdf.cell(100, 5, txt=f"E-mail: {limpiar_texto(email_cliente)}", ln=True)
-    pdf.ln(8)
+    y_current = pdf.get_y()
     
-    pdf.set_font("Helvetica", style="B", size=10)
+    pdf.set_xy(10, y_current)
+    pdf.multi_cell(90, 4, txt=f"Nombre: {limpiar_texto(nombre_cliente)}")
+    y_left = pdf.get_y()
+    pdf.set_xy(105, y_current)
+    pdf.multi_cell(95, 4, txt=f"Proyecto: {limpiar_texto(descripcion_cotizacion)}")
+    y_right = pdf.get_y()
+    y_current = max(y_left, y_right)
+
+    pdf.set_xy(10, y_current)
+    pdf.multi_cell(90, 4, txt=f"Institucion: {limpiar_texto(institucion_cliente)}")
+    y_left = pdf.get_y()
+    pdf.set_xy(105, y_current)
+    pdf.multi_cell(95, 4, txt=f"Ubicacion: {limpiar_texto(ubicacion)}")
+    y_right = pdf.get_y()
+    y_current = max(y_left, y_right)
+
+    pdf.set_xy(10, y_current)
+    pdf.multi_cell(90, 4, txt=f"Direccion: {limpiar_texto(direccion_cliente)}")
+    y_left = pdf.get_y()
+    pdf.set_xy(105, y_current)
+    pdf.multi_cell(95, 4, txt=f"Tel. Cotizador: {limpiar_texto(telefono_cotizador)}")
+    y_right = pdf.get_y()
+    y_current = max(y_left, y_right)
+
+    pdf.set_xy(10, y_current)
+    pdf.multi_cell(90, 4, txt=f"Telefono: {limpiar_texto(telefono_cliente)}")
+    y_left = pdf.get_y()
+    pdf.set_xy(105, y_current)
+    pdf.multi_cell(95, 4, txt=f"E-mail: {limpiar_texto(email_cliente)}")
+    y_right = pdf.get_y()
+    y_current = max(y_left, y_right)
+    
+    pdf.set_y(y_current + 5)
+    
+    pdf.set_font("Helvetica", style="B", size=9)
     pdf.set_fill_color(230, 230, 230)
     pdf.cell(30, 7, txt="Tipo", border=1, ln=False, fill=True)
     pdf.cell(75, 7, txt="Concepto / Descripcion", border=1, ln=False, fill=True)
@@ -302,14 +325,47 @@ if st.session_state.conceptos:
     pdf.cell(25, 7, txt="Precio U.", border=1, ln=False, fill=True, align="R")
     pdf.cell(25, 7, txt="Importe", border=1, ln=True, fill=True, align="R")
     
-    pdf.set_font("Helvetica", size=9)
+    # SISTEMA DINÁMICO DE ALTURAS PARA TABLA
+    pdf.set_font("Helvetica", size=8)
     for _, fila in df_editado.iterrows():
-        pdf.cell(30, 6, txt=limpiar_texto(fila["Tipo"]), border=1, ln=False)
-        pdf.cell(75, 6, txt=limpiar_texto(fila["Concepto"]), border=1, ln=False)
-        pdf.cell(15, 6, txt=f"{fila['Cant.']:.2f}", border=1, ln=False, align="C")
-        pdf.cell(20, 6, txt=limpiar_texto(fila["Unidad"]), border=1, ln=False, align="C")
-        pdf.cell(25, 6, txt=f"${fila['Precio Venta']:.2f}", border=1, ln=False, align="R")
-        pdf.cell(25, 6, txt=f"${fila['Importe']:.2f}", border=1, ln=True, align="R")
+        # Prevenir cortes de hoja a mitad de un renglón
+        if pdf.get_y() > 255:
+            pdf.add_page()
+            
+        x_start = 10
+        y_start = pdf.get_y()
+        
+        texto_tipo = limpiar_texto(fila["Tipo"])
+        texto_concepto = limpiar_texto(fila["Concepto"])
+        
+        # 1. Medimos el alto real que va a ocupar el Concepto
+        pdf.set_xy(x_start + 30, y_start)
+        pdf.multi_cell(75, 5, txt=texto_concepto, border=0, align="L")
+        row_height = pdf.get_y() - y_start
+        
+        if row_height < 6:
+            row_height = 6
+            
+        # 2. Imprimimos el resto de las columnas usando el nuevo alto
+        pdf.set_xy(x_start, y_start)
+        pdf.multi_cell(30, 5, txt=texto_tipo, border=0, align="L")
+        
+        pdf.set_xy(x_start + 105, y_start)
+        pdf.cell(15, row_height, txt=f"{fila['Cant.']:.2f}", border=0, align="C")
+        pdf.cell(20, row_height, txt=limpiar_texto(fila["Unidad"]), border=0, align="C")
+        pdf.cell(25, row_height, txt=f"${fila['Precio Venta']:.2f}", border=0, align="R")
+        pdf.cell(25, row_height, txt=f"${fila['Importe']:.2f}", border=0, align="R")
+        
+        # 3. Dibujamos los marcos alrededor
+        pdf.rect(x_start, y_start, 30, row_height)
+        pdf.rect(x_start + 30, y_start, 75, row_height)
+        pdf.rect(x_start + 105, y_start, 15, row_height)
+        pdf.rect(x_start + 120, y_start, 20, row_height)
+        pdf.rect(x_start + 140, y_start, 25, row_height)
+        pdf.rect(x_start + 165, y_start, 25, row_height)
+        
+        # 4. Bajamos el cursor para el siguiente renglón
+        pdf.set_y(y_start + row_height)
         
     pdf.ln(5)
     pdf.set_font("Helvetica", style="B", size=10)
@@ -366,7 +422,6 @@ if st.session_state.conceptos:
     pdf.cell(0, 5, txt=limpiar_texto(puesto_cotizador), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
 
-    # Creamos un archivo intermedio seguro
     pdf.output("cotizacion_temp.pdf")
     with open("cotizacion_temp.pdf", "rb") as pdf_file:
         pdf_bytes = pdf_file.read()
