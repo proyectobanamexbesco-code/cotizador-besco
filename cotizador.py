@@ -62,16 +62,20 @@ def obtener_gspread_client():
     creds = Credentials.from_service_account_info(credentials_dict, scopes=scopes)
     return gspread.authorize(creds)
 
-@st.cache_data(ttl=300)  # Memoria caché por 5 minutos
+@st.cache_data(ttl=300)
 def cargar_preciario_sodexo():
     try:
         client = obtener_gspread_client()
-        # Intentar abrir por nombre de pestaña explícito 'Hoja 1' para evitar desajustes
-        workbook = client.open("Preciario Sodexo Banamex")
-        try:
-            sheet = workbook.worksheet("Hoja 1")
+        # Apertura flexible por nombre de archivo
+        try: workbook = client.open("preciario besco")
+        except: workbook = client.open("Preciario Besco")
+        
+        # Apertura flexible por nombre de pestaña
+        try: sheet = workbook.worksheet("preciario sodexo banamex")
         except:
-            sheet = workbook.sheet1 # Ruta de respaldo si se llama diferente
+            try: sheet = workbook.worksheet("Preciario Sodexo Banamex")
+            except: sheet = workbook.sheet1
+            
         return pd.DataFrame(sheet.get_all_records())
     except Exception as e:
         return pd.DataFrame()
@@ -202,7 +206,7 @@ if st.session_state.app_actual == "Menu":
         if st.button("Desplegar Nueva App", use_container_width=True): cambiar_pantalla("OtraApp")
 
 # ==========================================
-# VISTA 2: COTIZADOR CON PRECIARIO SODEXO
+# VISTA 2: COTIZADOR INDUSTRIAL
 # ==========================================
 elif st.session_state.app_actual == "Cotizaciones":
     if st.button("⬅️ Volver al Menú", key="v_cot"): cambiar_pantalla("Menu")
@@ -240,7 +244,6 @@ elif st.session_state.app_actual == "Cotizaciones":
         numero_presupuesto = "Llenando datos..."
     folio_placeholder.success(f"**Folio:**\n{numero_presupuesto}")
 
-    # ===== SECCIÓN DINÁMICA: DETALLES DEL SERVICIO =====
     st.header("3. Detalles del Servicio")
     if 'conceptos' not in st.session_state: st.session_state.conceptos = []
     
@@ -254,7 +257,7 @@ elif st.session_state.app_actual == "Cotizaciones":
 
     if usar_preciario:
         if df_preciario.empty:
-            st.warning("⚠️ No se pudo leer la información de Google Sheets. Asegúrate de que la pestaña interna se llame exactamente 'Hoja 1'. Mientras tanto, se activó la captura manual:")
+            st.warning("⚠️ No se pudo leer la información de Google Sheets. Verifica que el archivo esté compartido y los nombres correctos.")
             concepto_val = cs2.text_input("Concepto Manual")
         else:
             regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
@@ -268,7 +271,7 @@ elif st.session_state.app_actual == "Cotizaciones":
                 concepto_val = concepto_sel
                 unidad_val = str(fila.get("Unidad", "Pieza")).strip()
                 
-                # SÚPER LIMPIADOR DE FORMATOS DE MONEDA ($ 1,500.20 -> 1500.20)
+                # Convertidor de moneda dinámico
                 raw_costo = str(fila.get(region_seleccionada, "0")).replace('$', '').replace(',', '').strip()
                 try: costo_val = float(raw_costo)
                 except: costo_val = 0.0
@@ -297,7 +300,6 @@ elif st.session_state.app_actual == "Cotizaciones":
             })
             st.rerun()
 
-    # ===== RESUMEN Y GENERACIÓN PDF =====
     if st.session_state.conceptos:
         st.header("4. Resumen de Cotización")
         df_editado = st.data_editor(pd.DataFrame(st.session_state.conceptos), num_rows="dynamic", use_container_width=True)
@@ -306,7 +308,7 @@ elif st.session_state.app_actual == "Cotizaciones":
         iva, total = subtotal * 0.16, subtotal * 1.16
         st.metric("TOTAL COTIZADO", f"${total:,.2f} MXN")
         
-        st.header("5. Condiciones Comerciales")
+        st.header("5. Conditions")
         co1, co2 = st.columns(2)
         tipo_moneda = co1.selectbox("Moneda", ["Pesos Mexicanos", "Dólares de Estados Unidos"])
         tiempo_entrega = f"{int(co1.number_input('Días Ejecución', min_value=1, value=15))} días hábiles"
@@ -386,7 +388,9 @@ elif st.session_state.app_actual == "Cotizaciones":
 # ==========================================
 elif st.session_state.app_actual == "Reportes":
     if st.button("⬅️ Volver al Menú", key="v_rep"): cambiar_pantalla("Menu")
-    
+    if LOGO_PATH is None:
+        st.warning("⚠️ Advertencia: No se encontró el archivo del logotipo en GitHub. El PDF se generará sin logotipo.")
+
     st.title("📑 Sistema de Evidencia Técnica BESCO")
 
     st.subheader("1. Identificación General del Servicio")
