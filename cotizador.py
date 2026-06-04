@@ -160,7 +160,9 @@ class BESCO_PDF(FPDF):
 
 def enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nombre_archivo, corr_extra, f_ejec, destinatarios_base):
     try:
-        if "EMAIL_SENDER" not in st.secrets or "EMAIL_PASSWORD" not in st.secrets: return False
+        if "EMAIL_SENDER" not in st.secrets or "EMAIL_PASSWORD" not in st.secrets:
+            st.error("❌ Error de configuración: Faltan credenciales en Secrets para enviar el correo.")
+            return False
         remitente, password = st.secrets["EMAIL_SENDER"], st.secrets["EMAIL_PASSWORD"]
         destinatarios = list(set(destinatarios_base + ([c.strip() for c in corr_extra.split(",")] if corr_extra else [])))
         msg = EmailMessage()
@@ -172,7 +174,9 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nombre_archivo, c
             smtp.login(remitente, password)
             smtp.send_message(msg)
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"Error de red/SMTP: {e}")
+        return False
 
 # ==========================================
 # MENÚ Y SISTEMA DE NAVEGACIÓN GLOBAL
@@ -272,7 +276,6 @@ elif st.session_state.app_actual == "Cotizaciones":
 
     concepto_val, unidad_val, costo_val, item_final = "", "Pieza", 0.0, ""
 
-    # ===== FLUJO DE PRECIARIO SODEXO EN 3 COLUMNAS SIMÉTRICAS =====
     if usar_preciario:
         if df_preciario.empty:
             st.warning("⚠️ Modo de respaldo activo. Verifica la pestaña 'preciario sodexo banamex' en tu archivo de Google Drive.")
@@ -288,7 +291,6 @@ elif st.session_state.app_actual == "Cotizaciones":
                 region_seleccionada = st.selectbox("📍 Región de Tarifas", regiones)
             
             with col_sel3:
-                # El Buscador ahora solo muestra las descripciones de los productos limpias
                 lista_productos = ["-- Selecciona un producto --"] + df_preciario["Concepto"].dropna().astype(str).unique().tolist()
                 producto_sel = st.selectbox("🔍 Buscador de Producto (Escribe palabras clave)", lista_productos)
             
@@ -303,14 +305,12 @@ elif st.session_state.app_actual == "Cotizaciones":
                 except: costo_val = 0.0
                 
             with col_sel2:
-                # Casilla del Item completamente independiente
                 item_final = st.text_input("📦 Casilla de Item", value=item_final)
     else:
         cs1, cs2 = st.columns([1, 2])
         tipo_servicio = cs1.selectbox("Tipo de Servicio", ["Aire Acondicionado", "Eléctrico", "Luminarias", "Hidrosanitario", "Acabados", "Otros"])
         concepto_val = cs2.text_input("Concepto o Descripción detallada")
 
-    # ===== CAMPOS DE CÁLCULO INFERIORES =====
     cx1, cx2, cx3, cx4 = st.columns([1, 1.5, 1.2, 1.2])
     cantidad = cx1.number_input("Cantidad", min_value=0.01, value=1.00)
     
@@ -320,7 +320,6 @@ elif st.session_state.app_actual == "Cotizaciones":
     tipo_unidad = cx2.selectbox("Unidad", opciones_unidad, index=opciones_unidad.index(unidad_val) if unidad_val in opciones_unidad else 0)
     costo_unitario = cx3.number_input("Costo U. ($)", min_value=0.0, value=float(costo_val), format="%.2f")
     
-    # REGLA OBLIGATORIA: 0% AL INICIAR SI EL PRECIARIO ESTÁ ENCIENDO, 23.50% SI ES MANUAL
     utilidad_base = 0.0 if usar_preciario else 23.50
     margen_utilidad = cx4.number_input("Utilidad (%)", min_value=0.0, value=utilidad_base, step=0.50)
     
@@ -330,7 +329,6 @@ elif st.session_state.app_actual == "Cotizaciones":
             st.error("❌ Por favor, ingresa o selecciona un concepto válido antes de continuar.")
         else:
             p_venta = costo_unitario * (1 + (margen_utilidad / 100))
-            # Fusión inteligente del Item y la Descripción para los reportes y PDF
             descripcion_estructurada = f"{item_final} - {concepto_val}" if item_final else concepto_val
             st.session_state.conceptos.append({
                 "Tipo": tipo_servicio, "Concepto": descripcion_estructurada, "Cant.": cantidad,
@@ -338,7 +336,6 @@ elif st.session_state.app_actual == "Cotizaciones":
             })
             st.rerun()
 
-    # ===== TABLA RESUMEN Y GENERACIÓN PDF =====
     if st.session_state.conceptos:
         st.header("4. Resumen de Cotización")
         df_editado = st.data_editor(pd.DataFrame(st.session_state.conceptos), num_rows="dynamic", use_container_width=True)
@@ -496,10 +493,29 @@ elif st.session_state.app_actual == "Reportes":
 
     st.markdown("---")
     st.subheader("5. Envío de Reporte")
-    dest_oficina = ["gerardo.mendez@besco.mx"]
+    
+    mapeo_correos = {
+        "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
+        "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
+        "Pachuca": ["german.constantino@besco.mx"],
+        "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
+        "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
+        "CDMX": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+        "Ben & Company": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+        "BX+": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+        "Emerson": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+        "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"],
+        "Tampico": ["ingrid.lucio@besco.mx", "joel.perez@besco.mx", "gerardo.mendez@besco.mx"]
+    }
+    
+    dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
+    if "gerardo.mendez@besco.mx" not in dest_oficina: dest_oficina.append("gerardo.mendez@besco.mx")
+    
+    st.info(f"📧 Destinatarios automáticos: {', '.join(dest_oficina)}")
+    correos_extra = st.text_input("Correos adicionales (separados por coma)")
 
     if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
-        with st.spinner("Procesando documento..."):
+        with st.spinner("Procesando documento y enviando correos..."):
             pdf_reporte = BESCO_PDF()
             pdf_reporte.add_page()
             
@@ -508,17 +524,66 @@ elif st.session_state.app_actual == "Reportes":
             pdf_reporte.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
             f_ejec_str = fecha_ejecucion.strftime('%d/%m/%Y')
             pdf_reporte.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
-            
+            if sucursal: pdf_reporte.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
+            pdf_reporte.set_font('Arial', 'B', 10)
+            pdf_reporte.cell(0, 7, f"Técnico: {tecnico} | Supervisor: {supervisor}", 0, 1)
+            pdf_reporte.set_font('Arial', '', 10)
+            pdf_reporte.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf_reporte.ln(5)
+
             for eq in equipos_data:
                 if pdf_reporte.get_y() > 240: pdf_reporte.add_page()
                 pdf_reporte.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
+                pdf_reporte.set_font('Arial', 'B', 10)
+                pdf_reporte.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
+                pdf_reporte.set_font('Arial', '', 10)
+                
+                valid_meds = {k: v for k, v in eq['meds'].items() if v}
+                for k, v in valid_meds.items(): 
+                    pdf_reporte.cell(60, 6, f"{k}:", 1); pdf_reporte.cell(130, 6, f"{v}", 1, 1)
+                if eq['otros']: pdf_reporte.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
+                    
+                if eq['tag'] or eq['marca'] or eq['cap']: 
+                    pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1); pdf_reporte.set_font('Arial', '', 10)
+                
+                if eq['actividades']: pdf_reporte.multi_cell(0, 6, f"Actividades Realizadas:\n{eq['actividades']}", 1)
+                if eq['com']: pdf_reporte.multi_cell(0, 6, f"Comentarios Extras:\n{eq['com']}", 1)
+                    
                 pdf_reporte.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'], "antes")
                 pdf_reporte.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'], "despues")
+                pdf_reporte.ln(5)
+
+            df_c = df_mat.dropna(subset=["Descripción"])
+            if not df_c.empty:
+                if pdf_reporte.get_y() > 220: pdf_reporte.add_page()
+                pdf_reporte.add_custom_section("Materiales Utilizados")
+                pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(30, 7, "CANT.", 1, 0, 'C'); pdf_reporte.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C'); pdf_reporte.set_font('Arial', '', 9)
+                for _, row in df_c.iterrows(): pdf_reporte.cell(30, 7, str(row["Cantidad"]), 1); pdf_reporte.cell(160, 7, str(row["Descripción"]), 1, 1)
+
+            fotos_folio = [f for f in archivos_folio if f and "image" in f.type]
+            if fotos_folio: pdf_reporte.folio_grid("FOLIO BESCO", fotos_folio)
 
             pdf_bytes = pdf_reporte.output(dest='S').encode('latin-1')
+            
+            pdfs_folio = [f for f in archivos_folio if f and f.type == "application/pdf"]
+            if pdfs_folio:
+                merger = PdfWriter()
+                merger.append(io.BytesIO(pdf_bytes))
+                for p in pdfs_folio: 
+                    p.seek(0) 
+                    merger.append(p)
+                out = io.BytesIO()
+                merger.write(out)
+                pdf_bytes = out.getvalue()
+                
             nom_archivo = f"Reporte_BESCO_{cliente}_{folio}.pdf".replace(" ", "_")
             
-            st.success("✅ Documento estructurado.")
+            correo_enviado = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nom_archivo, correos_extra, f_ejec_str, dest_oficina)
+            
+            if correo_enviado:
+                st.success("✅ Reporte generado y ENVIADO POR CORREO exitosamente.")
+            else:
+                st.warning("⚠️ El PDF se generó correctamente, pero hubo un problema al enviarlo por correo. Descárgalo aquí abajo:")
+                
             st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
 
 # ==========================================
