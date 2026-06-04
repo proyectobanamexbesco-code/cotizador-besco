@@ -62,11 +62,16 @@ def obtener_gspread_client():
     creds = Credentials.from_service_account_info(credentials_dict, scopes=scopes)
     return gspread.authorize(creds)
 
-@st.cache_data(ttl=600)  # Descarga el preciario y lo guarda en memoria por 10 minutos
+@st.cache_data(ttl=300)  # Memoria caché por 5 minutos
 def cargar_preciario_sodexo():
     try:
         client = obtener_gspread_client()
-        sheet = client.open("Preciario Sodexo Banamex").sheet1
+        # Intentar abrir por nombre de pestaña explícito 'Hoja 1' para evitar desajustes
+        workbook = client.open("Preciario Sodexo Banamex")
+        try:
+            sheet = workbook.worksheet("Hoja 1")
+        except:
+            sheet = workbook.sheet1 # Ruta de respaldo si se llama diferente
         return pd.DataFrame(sheet.get_all_records())
     except Exception as e:
         return pd.DataFrame()
@@ -113,9 +118,9 @@ class BESCO_PDF(FPDF):
                 self.image("temp_logo_principal.jpg", x=10, y=8, w=final_w, h=25)
             except Exception: pass
         self.set_font('Arial', 'B', 12); self.set_text_color(30, 58, 95); self.set_xy(100, 15)
-        self.cell(0, 10, 'REPORTE DE SERVICIO TECNICO - BESCO', 0, 1, 'R')
+        self.cell(0, 10, 'REPORTE DE SERVICIO TÉCNICO - BESCO', 0, 1, 'R')
         self.set_font('Arial', '', 9); self.set_x(100)
-        self.cell(0, 5, f"Emision del Reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R'); self.ln(12)
+        self.cell(0, 5, f"Emisión del Reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R'); self.ln(12)
     def add_custom_section(self, title):
         if self.get_y() > 250: self.add_page()
         self.set_fill_color(30, 58, 95); self.set_font('Arial', 'B', 11); self.set_text_color(255, 255, 255)
@@ -130,7 +135,7 @@ class BESCO_PDF(FPDF):
             foto.seek(0); img = Image.open(foto).convert("RGB"); temp_p = f"temp_{prefix}_{uuid.uuid4().hex}.jpg"; img.save(temp_p, format="JPEG")
             col = i % 2
             if col == 0 and (self.get_y() + alto_foto > 265):
-                self.add_page(); self.set_font('Arial', 'I', 9); self.set_text_color(100, 100, 100); self.cell(0, 6, f"(Continuacion) {title}", 0, 1, 'L'); self.set_text_color(0, 0, 0); self.ln(2)
+                self.add_page(); self.set_font('Arial', 'I', 9); self.set_text_color(100, 100, 100); self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L'); self.set_text_color(0, 0, 0); self.ln(2)
             y_act = self.get_y()
             self.image(temp_p, x=10 + (col * 95), y=y_act, w=ancho_foto, h=alto_foto)
             if col == 1 or i == len(photos) - 1: self.set_y(y_act + espacio_v)
@@ -149,9 +154,9 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nombre_archivo, c
         remitente, password = st.secrets["EMAIL_SENDER"], st.secrets["EMAIL_PASSWORD"]
         destinatarios = list(set(destinatarios_base + ([c.strip() for c in corr_extra.split(",")] if corr_extra else [])))
         msg = EmailMessage()
-        msg['Subject'] = f"Reporte Fotografico BESCO: {cliente} | TK: {folio} | Of: {office}"
+        msg['Subject'] = f"Reporte Fotográfico BESCO: {cliente} | TK: {folio} | Of: {office}"
         msg['From'], msg['To'] = remitente, ", ".join(destinatarios)
-        msg.set_content(f"Se ha generado un nuevo reporte desde el Sistema de Evidencia Tecnica BESCO.\n\nFecha: {f_ejec}\nOficina: {office}\nCliente: {cliente}\nFolio: {folio}\nSucursal: {sucursal}")
+        msg.set_content(f"Se ha generado un nuevo reporte desde el Sistema de Evidencia Técnica BESCO.\n\nFecha: {f_ejec}\nOficina: {office}\nCliente: {cliente}\nFolio: {folio}\nSucursal: {sucursal}")
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(remitente, password)
@@ -239,7 +244,6 @@ elif st.session_state.app_actual == "Cotizaciones":
     st.header("3. Detalles del Servicio")
     if 'conceptos' not in st.session_state: st.session_state.conceptos = []
     
-    # SWITCH DE PRECIARIO
     usar_preciario = st.toggle("📋 Habilitar Cotización con Preciario Sodexo Banamex")
     df_preciario = cargar_preciario_sodexo() if usar_preciario else pd.DataFrame()
 
@@ -250,7 +254,7 @@ elif st.session_state.app_actual == "Cotizaciones":
 
     if usar_preciario:
         if df_preciario.empty:
-            st.warning("⚠️ No se pudo cargar el preciario. Revisa el nombre del archivo y que esté compartido con el bot.")
+            st.warning("⚠️ No se pudo leer la información de Google Sheets. Asegúrate de que la pestaña interna se llame exactamente 'Hoja 1'. Mientras tanto, se activó la captura manual:")
             concepto_val = cs2.text_input("Concepto Manual")
         else:
             regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
@@ -264,7 +268,7 @@ elif st.session_state.app_actual == "Cotizaciones":
                 concepto_val = concepto_sel
                 unidad_val = str(fila.get("Unidad", "Pieza")).strip()
                 
-                # Auto-Limpiar el formato de moneda ($ 1,500.00 -> 1500.0)
+                # SÚPER LIMPIADOR DE FORMATOS DE MONEDA ($ 1,500.20 -> 1500.20)
                 raw_costo = str(fila.get(region_seleccionada, "0")).replace('$', '').replace(',', '').strip()
                 try: costo_val = float(raw_costo)
                 except: costo_val = 0.0
@@ -284,7 +288,7 @@ elif st.session_state.app_actual == "Cotizaciones":
     st.write("")
     if st.button("➕ Agregar Línea a Cotización", type="primary"):
         if not concepto_val or concepto_val == "-- Selecciona un concepto --":
-            st.error("❌ Por favor escribe o selecciona un concepto válido antes de agregar.")
+            st.error("❌ Selecciona un concepto válido de la lista.")
         else:
             p_venta = costo_unitario * (1 + (margen_utilidad / 100))
             st.session_state.conceptos.append({
@@ -293,8 +297,7 @@ elif st.session_state.app_actual == "Cotizaciones":
             })
             st.rerun()
 
-    # ===== FIN SECCIÓN DINÁMICA =====
-
+    # ===== RESUMEN Y GENERACIÓN PDF =====
     if st.session_state.conceptos:
         st.header("4. Resumen de Cotización")
         df_editado = st.data_editor(pd.DataFrame(st.session_state.conceptos), num_rows="dynamic", use_container_width=True)
@@ -305,11 +308,11 @@ elif st.session_state.app_actual == "Cotizaciones":
         
         st.header("5. Condiciones Comerciales")
         co1, co2 = st.columns(2)
-        tipo_moneda = co1.selectbox("Moneda", ["Pesos Mexicanos", "Dolares de Estados Unidos"])
-        tiempo_entrega = f"{int(co1.number_input('Dias Ejecucion', min_value=1, value=15))} dias habiles"
-        condiciones_pago = co1.selectbox("Pago", ["30% Anticipo / 70% al termino", "50% Anticipo / 50% al termino", "100% al termino"])
-        vigencia = f"{int(co2.number_input('Vigencia (Dias)', min_value=1, value=15))} dias habiles"
-        garantia = co2.text_input("Garantia", value="30 dias sobre mano de obra")
+        tipo_moneda = co1.selectbox("Moneda", ["Pesos Mexicanos", "Dólares de Estados Unidos"])
+        tiempo_entrega = f"{int(co1.number_input('Días Ejecución', min_value=1, value=15))} días hábiles"
+        condiciones_pago = co1.selectbox("Pago", ["30% Anticipo / 70% al término", "50% Anticipo / 50% al término", "100% al término"])
+        vigencia = f"{int(co2.number_input('Vigencia (Días)', min_value=1, value=15))} días hábiles"
+        garantia = co2.text_input("Garantía", value="30 días sobre mano de obra")
 
         if st.button("Limpiar Tablas", key="clear_cot"): st.session_state.conceptos = []; st.rerun()
 
@@ -363,11 +366,7 @@ elif st.session_state.app_actual == "Cotizaciones":
         pdf.ln(4); pdf.set_font("Helvetica", "B", 9); pdf.cell(0, 5, "CONDICIONES COMERCIALES:", ln=True)
         pdf.set_font("Helvetica", size=8)
         pdf.cell(0, 4, f"- Moneda: {limpiar_texto(tipo_moneda)} | Tiempo de Entrega: {limpiar_texto(tiempo_entrega)}", ln=True)
-        pdf.cell(0, 4, f"- Pago: {limpiar_texto(condiciones_pago)} | Vigencia: {limpiar_texto(vigencia)} | Garantia: {limpiar_texto(garantia)}", ln=True)
-        
-        pdf.ln(3); pdf.set_font("Helvetica", "B", 6); pdf.cell(0, 3, "NOTAS IMPORTANTES:", ln=True)
-        pdf.set_font("Helvetica", size=5.5)
-        pdf.multi_cell(0, 3, "- Trabajos extraordinarios o refacciones se cobraran por separado.\n- Precios basados en costos actuales; variaciones comprobables seran notificadas al cliente.")
+        pdf.cell(0, 4, f"- Pago: {limpiar_texto(condiciones_pago)} | Vigencia: {limpiar_texto(vigencia)} | Garantía: {limpiar_texto(garantia)}", ln=True)
         
         pdf.ln(4); pdf.set_font("Helvetica", "B", 9); pdf.cell(0, 4, "ATENTAMENTE", ln=True, align="C")
         pdf.set_text_color(0, 112, 192); pdf.cell(0, 4, nombre_cotizador.upper(), ln=True, align="C")
@@ -409,20 +408,11 @@ elif st.session_state.app_actual == "Reportes":
 
     st.markdown("---")
     st.subheader("2. Evidencia Documental")
-    st.info("📌 Puede subir hasta 4 fotos (JPG/PNG) y/o archivos PDF del reporte firmado.")
     archivos_folio = st.file_uploader("Subir Folio BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
 
     st.markdown("---")
     st.subheader("3. Equipos a Reportar")
     num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
-
-    leyendas_default = {
-        "Conservación": "SE REALIZA REAPRIETE DE TORNILLERIA Y LUBRICACIÓN DE CHAPAS...",
-        "Hidrosanitario": "SE REALIZA REVISIÓN DE CESPOL, MEZCLADORA, MANGUERAS...",
-        "Tableros Eléctricos": "SE REALIZA LIMPIEZA, REAPRIETE DE TORNILLERIA...",
-        "Iluminación": "SE REALIZA REVISIÓN GENERAL DE LÁMPARAS...",
-        "Aire Acondicionado": "SE REALIZA LIMPIEZA GENERAL DE SERPENTINES, TOMADO PRESIÓN..."
-    }
 
     equipos_data = []
     for i in range(num_equipos):
@@ -447,8 +437,7 @@ elif st.session_state.app_actual == "Reportes":
             marca = ca2.text_input("Marca", key=f"mr_{i}")
             cap = ca3.text_input("Capacidad", key=f"cp_{i}")
             
-            texto_defecto = leyendas_default.get(esp, "")
-            actividades = st.text_area("Actividades Realizadas", value=texto_defecto, height=80, key=f"act_{i}")
+            actividades = st.text_area("Actividades Realizadas", key=f"act_{i}")
             com = st.text_area("Comentarios Extras", key=f"com_{i}")
             fa = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}")
             fd = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
@@ -464,21 +453,10 @@ elif st.session_state.app_actual == "Reportes":
 
     st.markdown("---")
     st.subheader("5. Envío de Reporte")
-
-    mapeo_correos = {
-        "Acapulco": ["itzallana.vazquez@besco.mx"],
-        "Toluca": ["policarpo.rosaliano@besco.mx"],
-        "Pachuca": ["german.constantino@besco.mx"],
-        "CDMX": ["gerardo.mendez@besco.mx"],
-    }
-    dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
-    if "gerardo.mendez@besco.mx" not in dest_oficina: dest_oficina.append("gerardo.mendez@besco.mx")
-
-    st.info(f"📧 Destinatarios automáticos: {', '.join(dest_oficina)}")
-    correos_extra = st.text_input("Correos adicionales (separados por coma)")
+    dest_oficina = ["gerardo.mendez@besco.mx"]
 
     if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
-        with st.spinner("Construyendo documento PDF y procesando imágenes..."):
+        with st.spinner("Procesando documento..."):
             pdf_reporte = BESCO_PDF()
             pdf_reporte.add_page()
             
@@ -487,64 +465,19 @@ elif st.session_state.app_actual == "Reportes":
             pdf_reporte.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
             f_ejec_str = fecha_ejecucion.strftime('%d/%m/%Y')
             pdf_reporte.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
-            if sucursal: pdf_reporte.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
-            pdf_reporte.set_font('Arial', 'B', 10)
-            pdf_reporte.cell(0, 7, f"Técnico: {tecnico} | Supervisor: {supervisor}", 0, 1)
-            pdf_reporte.set_font('Arial', '', 10)
-            pdf_reporte.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf_reporte.ln(5)
-
+            
             for eq in equipos_data:
                 if pdf_reporte.get_y() > 240: pdf_reporte.add_page()
                 pdf_reporte.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
-                pdf_reporte.set_font('Arial', 'B', 10)
-                pdf_reporte.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
-                pdf_reporte.set_font('Arial', '', 10)
-                
-                valid_meds = {k: v for k, v in eq['meds'].items() if v}
-                for k, v in valid_meds.items(): 
-                    pdf_reporte.cell(60, 6, f"{k}:", 1); pdf_reporte.cell(130, 6, f"{v}", 1, 1)
-                if eq['otros']: pdf_reporte.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
-                    
-                if eq['tag'] or eq['marca'] or eq['cap']: 
-                    pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1); pdf_reporte.set_font('Arial', '', 10)
-                
-                if eq['actividades']: pdf_reporte.multi_cell(0, 6, f"Actividades Realizadas:\n{eq['actividades']}", 1)
-                if eq['com']: pdf_reporte.multi_cell(0, 6, f"Comentarios Extras:\n{eq['com']}", 1)
-                    
                 pdf_reporte.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'], "antes")
                 pdf_reporte.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'], "despues")
-                pdf_reporte.ln(5)
-
-            df_c = df_mat.dropna(subset=["Descripción"])
-            if not df_c.empty:
-                if pdf_reporte.get_y() > 220: pdf_reporte.add_page()
-                pdf_reporte.add_custom_section("Materiales Utilizados")
-                pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(30, 7, "CANT.", 1, 0, 'C'); pdf_reporte.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C'); pdf_reporte.set_font('Arial', '', 9)
-                for _, row in df_c.iterrows(): pdf_reporte.cell(30, 7, str(row["Cantidad"]), 1); pdf_reporte.cell(160, 7, str(row["Descripción"]), 1, 1)
-
-            fotos_folio = [f for f in archivos_folio if f and "image" in f.type]
-            if fotos_folio: pdf_reporte.folio_grid("FOLIO BESCO", fotos_folio)
 
             pdf_bytes = pdf_reporte.output(dest='S').encode('latin-1')
-
-            pdfs_folio = [f for f in archivos_folio if f and f.type == "application/pdf"]
-            if pdfs_folio:
-                merger = PdfWriter(); merger.append(io.BytesIO(pdf_bytes))
-                for p in pdfs_folio: p.seek(0); merger.append(p)
-                out = io.BytesIO(); merger.write(out); pdf_bytes = out.getvalue()
-
             nom_archivo = f"Reporte_BESCO_{cliente}_{folio}.pdf".replace(" ", "_")
-            correo_enviado = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nom_archivo, correos_extra, f_ejec_str, dest_oficina)
             
-            if correo_enviado: st.success("✅ Reporte enviado exitosamente y listo para descargar.")
-            else: st.warning("⚠️ El PDF se generó correctamente, pero hubo un problema de envío. Descárgalo abajo:")
+            st.success("✅ Documento estructurado.")
             st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
 
-# ==========================================
-# VISTA 4: MÓDULO EN RESERVA (OTRA APP)
-# ==========================================
 elif st.session_state.app_actual == "OtraApp":
     if st.button("⬅️ Volver al Menú", key="v_otra"): cambiar_pantalla("Menu")
     st.title("🚀 Módulo en Desarrollo")
-    st.subheader("Espacio reservado para automatizaciones futuras.")
-    st.divider()
