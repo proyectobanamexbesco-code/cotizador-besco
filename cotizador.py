@@ -13,7 +13,7 @@ from google.oauth2.service_account import Credentials
 from PIL import Image
 
 # --- CONFIGURACIÓN DE PÁGINA TRUNK ---
-st.set_page_config(page_title="Panel Central de Aplicaciones - Grupo Besco", layout="wide")
+st.set_page_config(page_title="Panel de soluciones Grupo Besco", layout="wide")
 
 # --- RESOLUCIÓN Y ENRUTAMIENTO DE LOGOTIPOS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -66,18 +66,14 @@ def obtener_gspread_client():
 def cargar_preciario_sodexo():
     try:
         client = obtener_gspread_client()
-        # Apertura flexible por nombre de archivo
         try: workbook = client.open("preciario besco")
         except: workbook = client.open("Preciario Besco")
-        
-        # Apertura flexible por nombre de pestaña
         try: sheet = workbook.worksheet("preciario sodexo banamex")
         except:
             try: sheet = workbook.worksheet("Preciario Sodexo Banamex")
             except: sheet = workbook.sheet1
-            
         return pd.DataFrame(sheet.get_all_records())
-    except Exception as e:
+    except:
         return pd.DataFrame()
 
 def limpiar_texto(texto):
@@ -105,7 +101,7 @@ def callback_guardar_cotizacion(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli
         st.session_state.mensaje_error = f"Error al conectar con Google Sheets: {str(e)}"
 
 # ==========================================
-# CLASES Y FUNCIONES DE EVIDENCIA (REPORTES)
+# CLASES Y FUNCIONES DE REPORTE FOTOGRÁFICO
 # ==========================================
 class BESCO_PDF(FPDF):
     def __init__(self):
@@ -169,7 +165,7 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nombre_archivo, c
     except: return False
 
 # ==========================================
-# MENÚ Y NAVEGACIÓN
+# MENÚ Y SISTEMA DE NAVEGACIÓN GLOBAL
 # ==========================================
 if 'app_actual' not in st.session_state: st.session_state.app_actual = "Menu"
 def cambiar_pantalla(nombre_app):
@@ -180,43 +176,56 @@ with st.sidebar:
     st.markdown("### 🛠️ Navegación Global")
     if st.button("🏠 Inicio (Panel Central)", use_container_width=True): cambiar_pantalla("Menu")
     st.divider()
-    if st.button("📄 Cotizador Industrial", use_container_width=True): cambiar_pantalla("Cotizaciones")
-    if st.button("📸 Evidencia Técnica BESCO", use_container_width=True): cambiar_pantalla("Reportes")
-    if st.button("🚀 Próxima Aplicación", use_container_width=True): cambiar_pantalla("OtraApp")
+    if st.button("📄 Cotizaciones", use_container_width=True): cambiar_pantalla("Cotizaciones")
+    if st.button("📸 Reporte Fotográfico", use_container_width=True): cambiar_pantalla("Reportes")
+    if st.button("🚀 Próxima Aplicación 1", use_container_width=True): cambiar_pantalla("OtraApp")
+    if st.button("🚀 Próxima Aplicación 2", use_container_width=True): cambiar_pantalla("OtraApp2")
 
 # ==========================================
-# VISTA 1: MENÚ CENTRAL
+# VISTA 1: PANEL DE SOLUCIONES GRUPO BESCO
 # ==========================================
 if st.session_state.app_actual == "Menu":
-    st.title("💼 Panel Integrado - Grupo Besco")
+    st.title("Panel de soluciones Grupo Besco")
     st.markdown("Selecciona la herramienta operativa que deseas desplegar:")
     st.divider()
-    col1, col2, col3 = st.columns(3)
+    
+    # Fila 1: Herramientas Activas
+    col1, col2 = st.columns(2)
     with col1:
-        st.markdown("### 📄 Cotizador Industrial")
+        st.markdown("### 📄 Cotizaciones")
         st.caption("Cálculo dinámico con opción a Preciario Sodexo automatizado y guardado en Google Sheets.")
-        if st.button("Desplegar Cotizador", use_container_width=True, type="primary"): cambiar_pantalla("Cotizaciones")
+        if st.button("Desplegar Cotizaciones", use_container_width=True, type="primary"): cambiar_pantalla("Cotizaciones")
     with col2:
-        st.markdown("### 📸 Evidencia Técnica BESCO")
-        st.caption("Carga múltiple de imágenes, fusión de reportes PDF y envío por correo electrónico.")
-        if st.button("Desplegar Herramienta", use_container_width=True, type="primary"): cambiar_pantalla("Reportes")
+        st.markdown("### 📸 Generador de Reporte fotografico")
+        st.caption("Carga de imágenes en campo, estructuración de rejillas y fusión automática de folios PDF.")
+        if st.button("Desplegar Generador Fotográfico", use_container_width=True, type="primary"): cambiar_pantalla("Reportes")
+        
+    st.divider()
+    
+    # Fila 2: Espacios de Expansión (Dos Aplicaciones en Reserva)
+    col3, col4 = st.columns(2)
     with col3:
-        st.markdown("### 🚀 Próxima Aplicación")
+        st.markdown("### 🚀 Próxima Aplicación 1")
         st.caption("Módulo en reserva listo para recibir tus siguientes flujos automatizados.")
-        if st.button("Desplegar Nueva App", use_container_width=True): cambiar_pantalla("OtraApp")
+        if st.button("Desplegar Nueva App 1", use_container_width=True): cambiar_pantalla("OtraApp")
+    with col4:
+        st.markdown("### 🚀 Próxima Aplicación 2")
+        st.caption("Segundo espacio en reserva configurado para la expansión de futuras herramientas del equipo.")
+        if st.button("Desplegar Nueva App 2", use_container_width=True): cambiar_pantalla("OtraApp2")
 
 # ==========================================
-# VISTA 2: COTIZADOR INDUSTRIAL
+# VISTA 2: COTIZACIONES
 # ==========================================
 elif st.session_state.app_actual == "Cotizaciones":
-    if st.button("⬅️ Volver al Menú", key="v_cot"): cambiar_pantalla("Menu")
+    if st.button("⬅️ Volver al Menú Principal", key="v_cot"): cambiar_pantalla("Menu")
     
     col_h1, col_h2 = st.columns([2, 1])
     with col_h1:
         st.markdown("### Grupo Besco S.A. de C.V.")
         st.markdown("**Dirección:** Jose Ignacio Bartolache numero 1910")
     folio_placeholder = col_h2.empty()
-    st.title("Generador de Cotizaciones de Mantenimiento")
+    
+    st.title("Cotizaciones")
     
     st.header("1. Datos del Proyecto y Cotizador")
     c1, c2 = st.columns(2)
@@ -257,7 +266,7 @@ elif st.session_state.app_actual == "Cotizaciones":
 
     if usar_preciario:
         if df_preciario.empty:
-            st.warning("⚠️ No se pudo leer la información de Google Sheets. Verifica que el archivo esté compartido y los nombres correctos.")
+            st.warning("⚠️ Modo de respaldo activo. Verifica la pestaña 'preciario sodexo banamex' en tu archivo de Google Drive.")
             concepto_val = cs2.text_input("Concepto Manual")
         else:
             regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
@@ -271,7 +280,6 @@ elif st.session_state.app_actual == "Cotizaciones":
                 concepto_val = concepto_sel
                 unidad_val = str(fila.get("Unidad", "Pieza")).strip()
                 
-                # Convertidor de moneda dinámico
                 raw_costo = str(fila.get(region_seleccionada, "0")).replace('$', '').replace(',', '').strip()
                 try: costo_val = float(raw_costo)
                 except: costo_val = 0.0
@@ -291,7 +299,7 @@ elif st.session_state.app_actual == "Cotizaciones":
     st.write("")
     if st.button("➕ Agregar Línea a Cotización", type="primary"):
         if not concepto_val or concepto_val == "-- Selecciona un concepto --":
-            st.error("❌ Selecciona un concepto válido de la lista.")
+            st.error("❌ Por favor, ingresa o selecciona un concepto válido.")
         else:
             p_venta = costo_unitario * (1 + (margen_utilidad / 100))
             st.session_state.conceptos.append({
@@ -308,7 +316,7 @@ elif st.session_state.app_actual == "Cotizaciones":
         iva, total = subtotal * 0.16, subtotal * 1.16
         st.metric("TOTAL COTIZADO", f"${total:,.2f} MXN")
         
-        st.header("5. Conditions")
+        st.header("5. Condiciones Comerciales")
         co1, co2 = st.columns(2)
         tipo_moneda = co1.selectbox("Moneda", ["Pesos Mexicanos", "Dólares de Estados Unidos"])
         tiempo_entrega = f"{int(co1.number_input('Días Ejecución', min_value=1, value=15))} días hábiles"
@@ -384,14 +392,14 @@ elif st.session_state.app_actual == "Cotizaciones":
         )
 
 # ==========================================
-# VISTA 3: EVIDENCIA TÉCNICA BESCO
+# VISTA 3: GENERADOR DE REPORTE FOTOGRÁFICO
 # ==========================================
 elif st.session_state.app_actual == "Reportes":
-    if st.button("⬅️ Volver al Menú", key="v_rep"): cambiar_pantalla("Menu")
+    if st.button("⬅️ Volver al Menú Principal", key="v_rep"): cambiar_pantalla("Menu")
     if LOGO_PATH is None:
         st.warning("⚠️ Advertencia: No se encontró el archivo del logotipo en GitHub. El PDF se generará sin logotipo.")
 
-    st.title("📑 Sistema de Evidencia Técnica BESCO")
+    st.title("Generador de Reporte fotografico")
 
     st.subheader("1. Identificación General del Servicio")
     c_g1, c_g2, c_g3 = st.columns([2, 1, 1.5])
@@ -482,6 +490,19 @@ elif st.session_state.app_actual == "Reportes":
             st.success("✅ Documento estructurado.")
             st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
 
+# ==========================================
+# VISTAS 4 Y 5: MÓDULOS EN RESERVA
+# ==========================================
 elif st.session_state.app_actual == "OtraApp":
-    if st.button("⬅️ Volver al Menú", key="v_otra"): cambiar_pantalla("Menu")
-    st.title("🚀 Módulo en Desarrollo")
+    if st.button("⬅️ Volver al Menú Principal", key="v_otra1"): cambiar_pantalla("Menu")
+    st.title("🚀 Próxima Aplicación 1")
+    st.subheader("Módulo en Desarrollo 1")
+    st.divider()
+    st.warning("Espacio reservado para tu siguiente automatización de flujos de trabajo.")
+
+elif st.session_state.app_actual == "OtraApp2":
+    if st.button("⬅️ Volver al Menú Principal", key="v_otra2"): cambiar_pantalla("Menu")
+    st.title("🚀 Próxima Aplicación 2")
+    st.subheader("Módulo en Desarrollo 2")
+    st.divider()
+    st.warning("Segundo espacio en reserva listo para recibir código e integraciones operativas futuras.")
