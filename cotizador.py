@@ -33,12 +33,21 @@ elif os.path.exists(CLOUD_LOGO_BESCO):
 else:
     LOGO_PATH = None
 
+# --- ESTILOS GENERALES Y DEL BOTÓN DEL PRECIARIO ---
 st.markdown("""
     <style>
     .stApp { color: #262730 !important; }
     .stButton > button { color: white !important; background-color: #E21836 !important; }
     h1, h2, h3 { color: #1E3A5F !important; }
     div[data-testid="stExpander"] div[role="button"] p { font-weight: bold !important; color: #1E3A5F !important; }
+    
+    /* HACER MÁS GRANDE EL BOTÓN TOGGLE DEL PRECIARIO */
+    div[data-testid="stToggle"] label p {
+        font-size: 1.3rem !important;
+        font-weight: 900 !important;
+        color: #1E3A5F !important;
+        padding-left: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -189,7 +198,6 @@ if st.session_state.app_actual == "Menu":
     st.markdown("Selecciona la herramienta operativa que deseas desplegar:")
     st.divider()
     
-    # Fila 1: Herramientas Activas
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 📄 Cotizaciones")
@@ -202,7 +210,6 @@ if st.session_state.app_actual == "Menu":
         
     st.divider()
     
-    # Fila 2: Espacios de Expansión (Dos Aplicaciones en Reserva)
     col3, col4 = st.columns(2)
     with col3:
         st.markdown("### 🚀 Próxima Aplicación 1")
@@ -256,7 +263,10 @@ elif st.session_state.app_actual == "Cotizaciones":
     st.header("3. Detalles del Servicio")
     if 'conceptos' not in st.session_state: st.session_state.conceptos = []
     
-    usar_preciario = st.toggle("📋 Habilitar Cotización con Preciario Sodexo Banamex")
+    st.write("") # Espacio para respirar
+    usar_preciario = st.toggle("📋 HABILITAR COTIZACIÓN CON PRECIARIO SODEXO BANAMEX")
+    st.write("")
+    
     df_preciario = cargar_preciario_sodexo() if usar_preciario else pd.DataFrame()
 
     cs1, cs2 = st.columns([1, 2])
@@ -272,12 +282,18 @@ elif st.session_state.app_actual == "Cotizaciones":
             regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
             region_seleccionada = cs1.selectbox("📍 Región de Tarifas", regiones)
             
-            lista_conceptos = ["-- Selecciona un concepto --"] + df_preciario["Concepto"].dropna().astype(str).unique().tolist()
-            concepto_sel = cs2.selectbox("🔍 Buscador de Conceptos Sodexo", lista_conceptos)
+            # FUSIONAR ITEM + CONCEPTO PARA EL BUSCADOR
+            if "item" in df_preciario.columns:
+                df_preciario["Buscador"] = df_preciario["item"].astype(str) + " - " + df_preciario["Concepto"].astype(str)
+            else:
+                df_preciario["Buscador"] = df_preciario["Concepto"].astype(str)
+                
+            lista_conceptos = ["-- Selecciona un concepto --"] + df_preciario["Buscador"].dropna().astype(str).unique().tolist()
+            concepto_sel = cs2.selectbox("🔍 Buscador (Escribe Letra o Item)", lista_conceptos)
             
             if concepto_sel != "-- Selecciona un concepto --":
-                fila = df_preciario[df_preciario["Concepto"] == concepto_sel].iloc[0]
-                concepto_val = concepto_sel
+                fila = df_preciario[df_preciario["Buscador"] == concepto_sel].iloc[0]
+                concepto_val = concepto_sel # Se guardará como "1.2 - Suministro de..."
                 unidad_val = str(fila.get("Unidad", "Pieza")).strip()
                 
                 raw_costo = str(fila.get(region_seleccionada, "0")).replace('$', '').replace(',', '').strip()
@@ -294,7 +310,10 @@ elif st.session_state.app_actual == "Cotizaciones":
     
     tipo_unidad = cx2.selectbox("Unidad", opciones_unidad, index=opciones_unidad.index(unidad_val) if unidad_val in opciones_unidad else 0)
     costo_unitario = cx3.number_input("Costo U. ($)", min_value=0.0, value=float(costo_val), format="%.2f")
-    margen_utilidad = cx4.number_input("Utilidad (%)", min_value=0.0, value=23.50, step=0.50)
+    
+    # UTILIDAD DINÁMICA: 0% SI USAS PRECIARIO, 23.50% SI ES MANUAL
+    utilidad_base = 0.0 if usar_preciario else 23.50
+    margen_utilidad = cx4.number_input("Utilidad (%)", min_value=0.0, value=utilidad_base, step=0.50)
     
     st.write("")
     if st.button("➕ Agregar Línea a Cotización", type="primary"):
