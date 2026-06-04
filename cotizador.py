@@ -33,7 +33,7 @@ elif os.path.exists(CLOUD_LOGO_BESCO):
 else:
     LOGO_PATH = None
 
-# --- ESTILOS GENERALES Y DEL BOTÓN DEL PRECIARIO ---
+# --- ESTILOS GENERALES Y MAXI-BOTÓN DEL PRECIARIO ---
 st.markdown("""
     <style>
     .stApp { color: #262730 !important; }
@@ -41,12 +41,13 @@ st.markdown("""
     h1, h2, h3 { color: #1E3A5F !important; }
     div[data-testid="stExpander"] div[role="button"] p { font-weight: bold !important; color: #1E3A5F !important; }
     
-    /* HACER MÁS GRANDE EL BOTÓN TOGGLE DEL PRECIARIO */
+    /* ESTILIZACIÓN RESALTADA Y GRANDE PARA EL BOTÓN DEL PRECIARIO */
     div[data-testid="stToggle"] label p {
-        font-size: 1.3rem !important;
+        font-size: 1.35rem !important;
         font-weight: 900 !important;
-        color: #1E3A5F !important;
-        padding-left: 10px;
+        color: #E21836 !important;
+        border-left: 4px solid #1E3A5F;
+        padding-left: 12px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -263,45 +264,53 @@ elif st.session_state.app_actual == "Cotizaciones":
     st.header("3. Detalles del Servicio")
     if 'conceptos' not in st.session_state: st.session_state.conceptos = []
     
-    st.write("") # Espacio para respirar
+    st.write("") 
     usar_preciario = st.toggle("📋 HABILITAR COTIZACIÓN CON PRECIARIO SODEXO BANAMEX")
     st.write("")
     
     df_preciario = cargar_preciario_sodexo() if usar_preciario else pd.DataFrame()
 
-    cs1, cs2 = st.columns([1, 2])
-    tipo_servicio = cs1.selectbox("Tipo de Servicio", ["Aire Acondicionado", "Eléctrico", "Luminarias", "Hidrosanitario", "Acabados", "Otros"])
+    concepto_val, unidad_val, costo_val, item_final = "", "Pieza", 0.0, ""
 
-    concepto_val, unidad_val, costo_val = "", "Pieza", 0.0
-
+    # ===== FLUJO DE PRECIARIO SODEXO EN 3 COLUMNAS SIMÉTRICAS =====
     if usar_preciario:
         if df_preciario.empty:
             st.warning("⚠️ Modo de respaldo activo. Verifica la pestaña 'preciario sodexo banamex' en tu archivo de Google Drive.")
+            cs1, cs2 = st.columns([1, 2])
+            tipo_servicio = cs1.selectbox("Tipo de Servicio", ["Aire Acondicionado", "Eléctrico", "Luminarias", "Hidrosanitario", "Acabados", "Otros"])
             concepto_val = cs2.text_input("Concepto Manual")
         else:
-            regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
-            region_seleccionada = cs1.selectbox("📍 Región de Tarifas", regiones)
+            col_sel1, col_sel2, col_sel3 = st.columns([1, 0.8, 2.2])
             
-            # FUSIONAR ITEM + CONCEPTO PARA EL BUSCADOR
-            if "item" in df_preciario.columns:
-                df_preciario["Buscador"] = df_preciario["item"].astype(str) + " - " + df_preciario["Concepto"].astype(str)
-            else:
-                df_preciario["Buscador"] = df_preciario["Concepto"].astype(str)
-                
-            lista_conceptos = ["-- Selecciona un concepto --"] + df_preciario["Buscador"].dropna().astype(str).unique().tolist()
-            concepto_sel = cs2.selectbox("🔍 Buscador (Escribe Letra o Item)", lista_conceptos)
+            with col_sel1:
+                tipo_servicio = st.selectbox("Tipo de Servicio", ["Aire Acondicionado", "Eléctrico", "Luminarias", "Hidrosanitario", "Acabados", "Otros"])
+                regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
+                region_seleccionada = st.selectbox("📍 Región de Tarifas", regiones)
             
-            if concepto_sel != "-- Selecciona un concepto --":
-                fila = df_preciario[df_preciario["Buscador"] == concepto_sel].iloc[0]
-                concepto_val = concepto_sel # Se guardará como "1.2 - Suministro de..."
+            with col_sel3:
+                # El Buscador ahora solo muestra las descripciones de los productos limpias
+                lista_productos = ["-- Selecciona un producto --"] + df_preciario["Concepto"].dropna().astype(str).unique().tolist()
+                producto_sel = st.selectbox("🔍 Buscador de Producto (Escribe palabras clave)", lista_productos)
+            
+            if producto_sel != "-- Selecciona un producto --":
+                fila = df_preciario[df_preciario["Concepto"] == producto_sel].iloc[0]
+                concepto_val = producto_sel
+                item_final = str(fila.get("item", "")).strip()
                 unidad_val = str(fila.get("Unidad", "Pieza")).strip()
                 
                 raw_costo = str(fila.get(region_seleccionada, "0")).replace('$', '').replace(',', '').strip()
                 try: costo_val = float(raw_costo)
                 except: costo_val = 0.0
+                
+            with col_sel2:
+                # Casilla del Item completamente independiente
+                item_final = st.text_input("📦 Casilla de Item", value=item_final)
     else:
+        cs1, cs2 = st.columns([1, 2])
+        tipo_servicio = cs1.selectbox("Tipo de Servicio", ["Aire Acondicionado", "Eléctrico", "Luminarias", "Hidrosanitario", "Acabados", "Otros"])
         concepto_val = cs2.text_input("Concepto o Descripción detallada")
 
+    # ===== CAMPOS DE CÁLCULO INFERIORES =====
     cx1, cx2, cx3, cx4 = st.columns([1, 1.5, 1.2, 1.2])
     cantidad = cx1.number_input("Cantidad", min_value=0.01, value=1.00)
     
@@ -311,22 +320,25 @@ elif st.session_state.app_actual == "Cotizaciones":
     tipo_unidad = cx2.selectbox("Unidad", opciones_unidad, index=opciones_unidad.index(unidad_val) if unidad_val in opciones_unidad else 0)
     costo_unitario = cx3.number_input("Costo U. ($)", min_value=0.0, value=float(costo_val), format="%.2f")
     
-    # UTILIDAD DINÁMICA: 0% SI USAS PRECIARIO, 23.50% SI ES MANUAL
+    # REGLA OBLIGATORIA: 0% AL INICIAR SI EL PRECIARIO ESTÁ ENCIENDO, 23.50% SI ES MANUAL
     utilidad_base = 0.0 if usar_preciario else 23.50
     margen_utilidad = cx4.number_input("Utilidad (%)", min_value=0.0, value=utilidad_base, step=0.50)
     
     st.write("")
     if st.button("➕ Agregar Línea a Cotización", type="primary"):
-        if not concepto_val or concepto_val == "-- Selecciona un concepto --":
-            st.error("❌ Por favor, ingresa o selecciona un concepto válido.")
+        if not concepto_val or concepto_val == "-- Selecciona un producto --":
+            st.error("❌ Por favor, ingresa o selecciona un concepto válido antes de continuar.")
         else:
             p_venta = costo_unitario * (1 + (margen_utilidad / 100))
+            # Fusión inteligente del Item y la Descripción para los reportes y PDF
+            descripcion_estructurada = f"{item_final} - {concepto_val}" if item_final else concepto_val
             st.session_state.conceptos.append({
-                "Tipo": tipo_servicio, "Concepto": concepto_val, "Cant.": cantidad,
+                "Tipo": tipo_servicio, "Concepto": descripcion_estructurada, "Cant.": cantidad,
                 "Unidad": tipo_unidad, "Costo U.": costo_unitario, "Precio Venta": p_venta, "Importe": p_venta * cantidad
             })
             st.rerun()
 
+    # ===== TABLA RESUMEN Y GENERACIÓN PDF =====
     if st.session_state.conceptos:
         st.header("4. Resumen de Cotización")
         df_editado = st.data_editor(pd.DataFrame(st.session_state.conceptos), num_rows="dynamic", use_container_width=True)
