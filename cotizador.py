@@ -611,13 +611,27 @@ elif st.session_state.app_actual == "OtraApp":
         else:
             df_equipos["Buscador"] = df_equipos.iloc[:, 0].astype(str) + " - " + df_equipos.iloc[:, 2].astype(str)
             
-        equipos_lista = ["-- Selecciona un equipo --"] + df_equipos["Buscador"].dropna().unique().tolist()
+        st.markdown("### 1. Filtro por Área")
         
-        st.markdown("### Selecciona el Activo a inspeccionar")
+        if col_area in df_equipos.columns:
+            areas_lista = ["-- Todas las Áreas --"] + sorted(df_equipos[col_area].dropna().astype(str).unique().tolist())
+            area_sel = st.selectbox("📍 Selecciona el Área (Opcional)", areas_lista)
+            
+            if area_sel != "-- Todas las Áreas --":
+                df_filtrado = df_equipos[df_equipos[col_area].astype(str) == area_sel]
+            else:
+                df_filtrado = df_equipos
+        else:
+            df_filtrado = df_equipos
+            st.warning("⚠️ No se encontró la columna 'AREA' para filtrar.")
+            
+        st.markdown("### 2. Selecciona el Activo a inspeccionar")
+        equipos_lista = ["-- Selecciona un equipo --"] + df_filtrado["Buscador"].dropna().unique().tolist()
+        
         equipo_sel = st.selectbox("🔍 Buscar Equipo en Base de Datos", equipos_lista)
         
         if equipo_sel != "-- Selecciona un equipo --":
-            fila_eq = df_equipos[df_equipos["Buscador"] == equipo_sel].iloc[0]
+            fila_eq = df_filtrado[df_filtrado["Buscador"] == equipo_sel].iloc[0]
             
             st.markdown("#### Datos del Levantamiento")
             col1, col2, col3 = st.columns(3)
