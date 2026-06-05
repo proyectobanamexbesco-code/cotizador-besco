@@ -643,7 +643,7 @@ elif st.session_state.app_actual == "OtraApp":
             st.markdown("#### Datos Generales")
             col1, col2, col3 = st.columns(3)
             cliente_lev = col1.text_input("Cliente / Proyecto", value="Nestlé")
-            tecnico_lev = col2.text_input("Técnico Asignado", value="Gerardo Méndez")
+            tecnico_lev = col2.text_input("Técnico Asignado", value="Oscar Salto")
             fecha_lev = col3.date_input("Fecha de Inspección", date.today())
             
             st.markdown("#### Detalles Técnicos del Equipo")
@@ -662,7 +662,7 @@ elif st.session_state.app_actual == "OtraApp":
             
             # --- NUEVA SECCIÓN DE ENVÍO DE CORREO PARA NESTLE ---
             st.markdown("#### Envío de Reporte")
-            dest_base_nestle = ["gerardo.mendez@besco.mx"]
+            dest_base_nestle = ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"]
             st.info(f"📧 Destinatarios automáticos: {', '.join(dest_base_nestle)}")
             correos_nestle = st.text_input("Correos adicionales (separados por coma)", key="mail_nestle")
             
