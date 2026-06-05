@@ -76,9 +76,16 @@ def cargar_preciario_sodexo():
 def cargar_listado_equipos():
     try:
         client = obtener_gspread_client()
-        try: workbook = client.open("Listado Equipos Besco")
-        except: workbook = client.open("listado equipos besco")
-        sheet = workbook.sheet1
+        # Buscando el archivo "nestle"
+        try: workbook = client.open("nestle")
+        except: workbook = client.open("Nestle")
+        
+        # Buscando la pestaña "nestle"
+        try: sheet = workbook.worksheet("nestle")
+        except: 
+            try: sheet = workbook.worksheet("Nestle")
+            except: sheet = workbook.sheet1
+            
         return pd.DataFrame(sheet.get_all_records())
     except: return pd.DataFrame()
 
@@ -587,7 +594,7 @@ elif st.session_state.app_actual == "OtraApp":
     df_equipos = cargar_listado_equipos()
     
     if df_equipos.empty:
-        st.warning("⚠️ No se detectaron equipos. Crea un archivo en Google Sheets llamado **Listado Equipos Besco** con las columnas: **TAG**, **Equipo**, y **Ubicacion**. Asegúrate de compartirlo con el correo del bot.")
+        st.warning("⚠️ No se detectaron equipos. Asegúrate de que tu archivo en Google Sheets se llame **nestle** (y su pestaña también **nestle**) con las columnas: **TAG**, **Equipo**, y **Ubicacion**. No olvides compartirlo con el correo del bot.")
     else:
         if "TAG" in df_equipos.columns and "Equipo" in df_equipos.columns:
             df_equipos["Buscador"] = df_equipos["TAG"].astype(str) + " - " + df_equipos["Equipo"].astype(str)
