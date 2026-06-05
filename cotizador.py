@@ -76,6 +76,7 @@ def cargar_preciario_sodexo():
 def cargar_listado_equipos():
     try:
         client = obtener_gspread_client()
+        # Búsqueda exacta en mayúsculas
         try: workbook = client.open("NESTLE")
         except:
             try: workbook = client.open("nestle")
@@ -659,8 +660,14 @@ elif st.session_state.app_actual == "OtraApp":
             
             st.divider()
             
-            if st.button("🚀 Generar PDF Individual del Equipo", type="primary"):
-                with st.spinner("Construyendo reporte del equipo..."):
+            # --- NUEVA SECCIÓN DE ENVÍO DE CORREO PARA NESTLE ---
+            st.markdown("#### Envío de Reporte")
+            dest_base_nestle = ["gerardo.mendez@besco.mx"]
+            st.info(f"📧 Destinatarios automáticos: {', '.join(dest_base_nestle)}")
+            correos_nestle = st.text_input("Correos adicionales (separados por coma)", key="mail_nestle")
+            
+            if st.button("🚀 Generar y Enviar PDF Individual", type="primary"):
+                with st.spinner("Construyendo reporte del equipo y enviando correo..."):
                     pdf_lev = BESCO_PDF()
                     pdf_lev.add_page()
                     
@@ -685,7 +692,24 @@ elif st.session_state.app_actual == "OtraApp":
                     pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
                     nom_archivo_lev = f"Nestle_{limpiar_texto(item_lev)}.pdf".replace(" ", "_")
                     
-                    st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado exitosamente.")
+                    # Llamada a la función de correo
+                    correo_enviado = enviar_correo(
+                        pdf_bytes=pdf_bytes_lev,
+                        cliente=limpiar_texto(cliente_lev),
+                        folio=limpiar_texto(item_lev),
+                        sucursal=limpiar_texto(area_lev),
+                        office="Proyecto Nestlé",
+                        nombre_archivo=nom_archivo_lev,
+                        corr_extra=correos_nestle,
+                        f_ejec=fecha_lev.strftime('%d/%m/%Y'),
+                        destinatarios_base=dest_base_nestle
+                    )
+                    
+                    if correo_enviado:
+                        st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado y ENVIADO POR CORREO exitosamente.")
+                    else:
+                        st.warning(f"⚠️ Reporte creado para **{item_lev}**, pero hubo un problema al enviarlo por correo. Descárgalo abajo:")
+                        
                     st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
 
 # ==========================================
