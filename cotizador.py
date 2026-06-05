@@ -76,7 +76,6 @@ def cargar_preciario_sodexo():
 def cargar_listado_equipos():
     try:
         client = obtener_gspread_client()
-        # Búsqueda exacta en mayúsculas
         try: workbook = client.open("NESTLE")
         except:
             try: workbook = client.open("nestle")
@@ -633,18 +632,24 @@ elif st.session_state.app_actual == "OtraApp":
         if equipo_sel != "-- Selecciona un equipo --":
             fila_eq = df_filtrado[df_filtrado["Buscador"] == equipo_sel].iloc[0]
             
-            st.markdown("#### Datos del Levantamiento")
-            col1, col2, col3 = st.columns(3)
-            cliente_lev = col1.text_input("Cliente / Proyecto", value="Nestlé")
-            tecnico_lev = col2.text_input("Técnico Asignado", value="Gerardo Méndez")
-            fecha_lev = col3.date_input("Fecha de Inspección", date.today())
-            
             val_desc = fila_eq.get(col_desc, 'N/A')
             val_item = fila_eq.get(col_item, 'N/A')
             val_area = fila_eq.get(col_area, 'N/A')
             val_frec = fila_eq.get(col_frec, 'N/A')
             
-            st.info(f"**Equipo Seleccionado:** {val_desc}  |  **ITEM:** {val_item}  |  **Área:** {val_area} | **Frecuencia:** {val_frec}")
+            st.info(f"**Equipo Seleccionado:** {val_desc}")
+            
+            st.markdown("#### Datos Generales")
+            col1, col2, col3 = st.columns(3)
+            cliente_lev = col1.text_input("Cliente / Proyecto", value="Nestlé")
+            tecnico_lev = col2.text_input("Técnico Asignado", value="Gerardo Méndez")
+            fecha_lev = col3.date_input("Fecha de Inspección", date.today())
+            
+            st.markdown("#### Detalles Técnicos del Equipo")
+            col4, col5, col6 = st.columns(3)
+            item_lev = col4.text_input("ITEM", value=str(val_item))
+            area_lev = col5.text_input("Área Asignada", value=str(val_area))
+            frecuencia_lev = col6.text_input("Frecuencia de Mantenimiento", value=str(val_frec))
             
             actividades_lev = st.text_area("Observaciones o Actividades Realizadas en este equipo")
             
@@ -666,9 +671,9 @@ elif st.session_state.app_actual == "OtraApp":
                     
                     pdf_lev.add_custom_section("Datos del Activo")
                     pdf_lev.set_font('Arial', 'B', 10)
-                    pdf_lev.cell(0, 7, f"ITEM: {limpiar_texto(str(val_item))} | Equipo: {limpiar_texto(str(val_desc))}", 0, 1)
+                    pdf_lev.cell(0, 7, f"ITEM: {limpiar_texto(item_lev)} | Equipo: {limpiar_texto(str(val_desc))}", 0, 1)
                     pdf_lev.set_font('Arial', '', 10)
-                    pdf_lev.cell(0, 7, f"Área: {limpiar_texto(str(val_area))} | Frecuencia: {limpiar_texto(str(val_frec))}", 0, 1)
+                    pdf_lev.cell(0, 7, f"Área: {limpiar_texto(area_lev)} | Frecuencia: {limpiar_texto(frecuencia_lev)}", 0, 1)
                     
                     if actividades_lev:
                         pdf_lev.ln(2)
@@ -678,9 +683,9 @@ elif st.session_state.app_actual == "OtraApp":
                     pdf_lev.photo_grid("Evidencia Fotográfica (Después)", fotos_despues_lev, 1, "desp_lev")
                     
                     pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
-                    nom_archivo_lev = f"Nestle_{limpiar_texto(str(val_item))}.pdf".replace(" ", "_")
+                    nom_archivo_lev = f"Nestle_{limpiar_texto(item_lev)}.pdf".replace(" ", "_")
                     
-                    st.success(f"✅ Reporte individual para el equipo **{val_item}** creado exitosamente.")
+                    st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado exitosamente.")
                     st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
 
 # ==========================================
