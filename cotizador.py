@@ -76,11 +76,9 @@ def cargar_preciario_sodexo():
 def cargar_listado_equipos():
     try:
         client = obtener_gspread_client()
-        # Buscando el archivo "nestle"
         try: workbook = client.open("nestle")
         except: workbook = client.open("Nestle")
         
-        # Buscando la pestaña "nestle"
         try: sheet = workbook.worksheet("nestle")
         except: 
             try: sheet = workbook.worksheet("Nestle")
@@ -594,10 +592,10 @@ elif st.session_state.app_actual == "OtraApp":
     df_equipos = cargar_listado_equipos()
     
     if df_equipos.empty:
-        st.warning("⚠️ No se detectaron equipos. Asegúrate de que tu archivo en Google Sheets se llame **nestle** (y su pestaña también **nestle**) con las columnas: **TAG**, **Equipo**, y **Ubicacion**. No olvides compartirlo con el correo del bot.")
+        st.warning("⚠️ No se detectaron equipos. Asegúrate de que tu archivo en Google Sheets se llame **nestle** (y su pestaña también **nestle**) con las columnas: **ITEM**, **AREA**, **DESCRIPCION DE EQUIPOS** y **FRECUENCIA**. No olvides compartirlo con el correo del bot.")
     else:
-        if "TAG" in df_equipos.columns and "Equipo" in df_equipos.columns:
-            df_equipos["Buscador"] = df_equipos["TAG"].astype(str) + " - " + df_equipos["Equipo"].astype(str)
+        if "ITEM" in df_equipos.columns and "DESCRIPCION DE EQUIPOS" in df_equipos.columns:
+            df_equipos["Buscador"] = df_equipos["ITEM"].astype(str) + " - " + df_equipos["DESCRIPCION DE EQUIPOS"].astype(str)
         else:
             df_equipos["Buscador"] = df_equipos.iloc[:, 0].astype(str)
             
@@ -615,7 +613,7 @@ elif st.session_state.app_actual == "OtraApp":
             tecnico_lev = col2.text_input("Técnico Asignado", value="Gerardo Méndez")
             fecha_lev = col3.date_input("Fecha de Inspección", date.today())
             
-            st.info(f"**Equipo Seleccionado:** {fila_eq.get('Equipo', 'N/A')}  |  **TAG:** {fila_eq.get('TAG', 'N/A')}  |  **Ubicación:** {fila_eq.get('Ubicacion', 'N/A')}")
+            st.info(f"**Equipo Seleccionado:** {fila_eq.get('DESCRIPCION DE EQUIPOS', 'N/A')}  |  **ITEM:** {fila_eq.get('ITEM', 'N/A')}  |  **Área:** {fila_eq.get('AREA', 'N/A')} | **Frecuencia:** {fila_eq.get('FRECUENCIA', 'N/A')}")
             
             actividades_lev = st.text_area("Observaciones o Actividades Realizadas en este equipo")
             
@@ -637,9 +635,9 @@ elif st.session_state.app_actual == "OtraApp":
                     
                     pdf_lev.add_custom_section("Datos del Activo")
                     pdf_lev.set_font('Arial', 'B', 10)
-                    pdf_lev.cell(0, 7, f"TAG: {limpiar_texto(fila_eq.get('TAG', 'N/A'))} | Equipo: {limpiar_texto(fila_eq.get('Equipo', 'N/A'))}", 0, 1)
+                    pdf_lev.cell(0, 7, f"ITEM: {limpiar_texto(fila_eq.get('ITEM', 'N/A'))} | Equipo: {limpiar_texto(fila_eq.get('DESCRIPCION DE EQUIPOS', 'N/A'))}", 0, 1)
                     pdf_lev.set_font('Arial', '', 10)
-                    pdf_lev.cell(0, 7, f"Ubicación: {limpiar_texto(fila_eq.get('Ubicacion', 'N/A'))}", 0, 1)
+                    pdf_lev.cell(0, 7, f"Área: {limpiar_texto(fila_eq.get('AREA', 'N/A'))} | Frecuencia: {limpiar_texto(fila_eq.get('FRECUENCIA', 'N/A'))}", 0, 1)
                     
                     if actividades_lev:
                         pdf_lev.ln(2)
@@ -649,9 +647,9 @@ elif st.session_state.app_actual == "OtraApp":
                     pdf_lev.photo_grid("Evidencia Fotográfica (Después)", fotos_despues_lev, 1, "desp_lev")
                     
                     pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
-                    nom_archivo_lev = f"Nestle_{limpiar_texto(fila_eq.get('TAG', 'Equipo'))}.pdf".replace(" ", "_")
+                    nom_archivo_lev = f"Nestle_{limpiar_texto(fila_eq.get('ITEM', 'Equipo'))}.pdf".replace(" ", "_")
                     
-                    st.success(f"✅ Reporte individual para el equipo **{fila_eq.get('TAG', '')}** creado exitosamente.")
+                    st.success(f"✅ Reporte individual para el equipo **{fila_eq.get('ITEM', '')}** creado exitosamente.")
                     st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
 
 # ==========================================
