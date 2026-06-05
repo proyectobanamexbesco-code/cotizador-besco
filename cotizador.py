@@ -22,16 +22,11 @@ CLOUD_LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 CLOUD_LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 CLOUD_LOGO_BESCO = os.path.join(BASE_DIR, "logo besco 2026.jpeg")
 
-if os.path.exists(LOCAL_LOGO_PATH):
-    LOGO_PATH = LOCAL_LOGO_PATH
-elif os.path.exists(CLOUD_LOGO_PATH):
-    LOGO_PATH = CLOUD_LOGO_PATH
-elif os.path.exists(CLOUD_LOGO_JPG):
-    LOGO_PATH = CLOUD_LOGO_JPG
-elif os.path.exists(CLOUD_LOGO_BESCO):
-    LOGO_PATH = CLOUD_LOGO_BESCO
-else:
-    LOGO_PATH = None
+if os.path.exists(LOCAL_LOGO_PATH): LOGO_PATH = LOCAL_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_PATH): LOGO_PATH = CLOUD_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_JPG): LOGO_PATH = CLOUD_LOGO_JPG
+elif os.path.exists(CLOUD_LOGO_BESCO): LOGO_PATH = CLOUD_LOGO_BESCO
+else: LOGO_PATH = None
 
 # --- ESTILOS GENERALES Y MAXI-BOTÓN DEL PRECIARIO ---
 st.markdown("""
@@ -40,15 +35,7 @@ st.markdown("""
     .stButton > button { color: white !important; background-color: #E21836 !important; }
     h1, h2, h3 { color: #1E3A5F !important; }
     div[data-testid="stExpander"] div[role="button"] p { font-weight: bold !important; color: #1E3A5F !important; }
-    
-    /* ESTILIZACIÓN RESALTADA Y GRANDE PARA EL BOTÓN DEL PRECIARIO */
-    div[data-testid="stToggle"] label p {
-        font-size: 1.35rem !important;
-        font-weight: 900 !important;
-        color: #E21836 !important;
-        border-left: 4px solid #1E3A5F;
-        padding-left: 12px;
-    }
+    div[data-testid="stToggle"] label p { font-size: 1.35rem !important; font-weight: 900 !important; color: #E21836 !important; border-left: 4px solid #1E3A5F; padding-left: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -83,8 +70,17 @@ def cargar_preciario_sodexo():
             try: sheet = workbook.worksheet("Preciario Sodexo Banamex")
             except: sheet = workbook.sheet1
         return pd.DataFrame(sheet.get_all_records())
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
+
+@st.cache_data(ttl=120) # Caché más corto para actualizar los equipos más rápido
+def cargar_listado_equipos():
+    try:
+        client = obtener_gspread_client()
+        try: workbook = client.open("Listado Equipos Besco")
+        except: workbook = client.open("listado equipos besco")
+        sheet = workbook.sheet1
+        return pd.DataFrame(sheet.get_all_records())
+    except: return pd.DataFrame()
 
 def limpiar_texto(texto):
     if not isinstance(texto, str): return str(texto)
@@ -98,12 +94,7 @@ def callback_guardar_cotizacion(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli
         sheet = client.open("Historial Cotizaciones Besco").sheet1
         for _, fila in df.iterrows():
             nueva_fila = [
-                str(folio), str(fecha_cot), str(nom_cli), str(inst_cli), str(dir_cli),
-                str(tel_cli), str(em_cli), str(cotizador), str(puesto), str(em_cot),
-                str(tel_cot), str(desc), str(ubi), float(sub), float(iva), float(tot),
-                str(moneda), str(entrega), str(pago), str(vig), str(gar),
-                str(fila["Tipo"]), str(fila["Concepto"]), float(fila["Cant."]),
-                str(fila["Unidad"]), float(fila["Costo U."]), float(fila["Precio Venta"]), float(fila["Importe"])
+                str(folio), str(fecha_cot), str(nom_cli), str(inst_cli), str(dir_cli), str(tel_cli), str(em_cli), str(cotizador), str(puesto), str(em_cot), str(tel_cot), str(desc), str(ubi), float(sub), float(iva), float(tot), str(moneda), str(entrega), str(pago), str(vig), str(gar), str(fila["Tipo"]), str(fila["Concepto"]), float(fila["Cant."]), str(fila["Unidad"]), float(fila["Costo U."]), float(fila["Precio Venta"]), float(fila["Importe"])
             ]
             sheet.append_row(nueva_fila)
         st.session_state.mensaje_exito = f"¡Cotización {folio} registrada en Google Sheets y PDF descargado!"
@@ -126,11 +117,11 @@ class BESCO_PDF(FPDF):
                 orig_w, orig_h = img_logo.size
                 final_w = orig_w * (25 / orig_h)
                 self.image("temp_logo_principal.jpg", x=10, y=8, w=final_w, h=25)
-            except Exception: pass
+            except: pass
         self.set_font('Arial', 'B', 12); self.set_text_color(30, 58, 95); self.set_xy(100, 15)
         self.cell(0, 10, 'REPORTE DE SERVICIO TÉCNICO - BESCO', 0, 1, 'R')
         self.set_font('Arial', '', 9); self.set_x(100)
-        self.cell(0, 5, f"Emisión del Reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R'); self.ln(12)
+        self.cell(0, 5, f"Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R'); self.ln(12)
     def add_custom_section(self, title):
         if self.get_y() > 250: self.add_page()
         self.set_fill_color(30, 58, 95); self.set_font('Arial', 'B', 11); self.set_text_color(255, 255, 255)
@@ -191,8 +182,8 @@ with st.sidebar:
     if st.button("🏠 Inicio (Panel Central)", use_container_width=True): cambiar_pantalla("Menu")
     st.divider()
     if st.button("📄 Cotizaciones", use_container_width=True): cambiar_pantalla("Cotizaciones")
-    if st.button("📸 Reporte Fotográfico", use_container_width=True): cambiar_pantalla("Reportes")
-    if st.button("🚀 Próxima Aplicación 1", use_container_width=True): cambiar_pantalla("OtraApp")
+    if st.button("📸 Reporte Fotográfico General", use_container_width=True): cambiar_pantalla("Reportes")
+    if st.button("📑 Levantamiento de Equipos", use_container_width=True): cambiar_pantalla("OtraApp")
     if st.button("🚀 Próxima Aplicación 2", use_container_width=True): cambiar_pantalla("OtraApp2")
 
 # ==========================================
@@ -209,7 +200,7 @@ if st.session_state.app_actual == "Menu":
         st.caption("Cálculo dinámico con opción a Preciario Sodexo automatizado y guardado en Google Sheets.")
         if st.button("Desplegar Cotizaciones", use_container_width=True, type="primary"): cambiar_pantalla("Cotizaciones")
     with col2:
-        st.markdown("### 📸 Generador de Reporte fotografico")
+        st.markdown("### 📸 Generador de Reporte Fotográfico")
         st.caption("Carga de imágenes en campo, estructuración de rejillas y fusión automática de folios PDF.")
         if st.button("Desplegar Generador Fotográfico", use_container_width=True, type="primary"): cambiar_pantalla("Reportes")
         
@@ -217,9 +208,9 @@ if st.session_state.app_actual == "Menu":
     
     col3, col4 = st.columns(2)
     with col3:
-        st.markdown("### 🚀 Próxima Aplicación 1")
-        st.caption("Módulo en reserva listo para recibir tus siguientes flujos automatizados.")
-        if st.button("Desplegar Nueva App 1", use_container_width=True): cambiar_pantalla("OtraApp")
+        st.markdown("### 📑 Levantamiento de Equipos")
+        st.caption("Búsqueda de activos desde base de datos en la nube y generación de reportes fotográficos por equipo.")
+        if st.button("Desplegar Levantamiento", use_container_width=True, type="primary"): cambiar_pantalla("OtraApp")
     with col4:
         st.markdown("### 🚀 Próxima Aplicación 2")
         st.caption("Segundo espacio en reserva configurado para la expansión de futuras herramientas del equipo.")
@@ -284,19 +275,19 @@ elif st.session_state.app_actual == "Cotizaciones":
             concepto_val = cs2.text_input("Concepto Manual")
         else:
             col_sel1, col_sel2, col_sel3 = st.columns([1, 0.8, 2.2])
-            
             with col_sel1:
                 tipo_servicio = st.selectbox("Tipo de Servicio", ["Aire Acondicionado", "Eléctrico", "Luminarias", "Hidrosanitario", "Acabados", "Otros"])
                 regiones = ["PU BAJÍO", "PU NOROESTE", "PU PENINSULAR", "PU METRO NORTE & SUR", "PU OCCIDENTE", "PU SUR", "PU NORTE", "PU CENTRO"]
                 region_seleccionada = st.selectbox("📍 Región de Tarifas", regiones)
-            
             with col_sel3:
-                lista_productos = ["-- Selecciona un producto --"] + df_preciario["Concepto"].dropna().astype(str).unique().tolist()
-                producto_sel = st.selectbox("🔍 Buscador de Producto (Escribe palabras clave)", lista_productos)
+                if "item" in df_preciario.columns: df_preciario["Buscador"] = df_preciario["item"].astype(str) + " - " + df_preciario["Concepto"].astype(str)
+                else: df_preciario["Buscador"] = df_preciario["Concepto"].astype(str)
+                lista_conceptos = ["-- Selecciona un concepto --"] + df_preciario["Buscador"].dropna().astype(str).unique().tolist()
+                concepto_sel = st.selectbox("🔍 Buscador (Escribe Letra o Item)", lista_conceptos)
             
-            if producto_sel != "-- Selecciona un producto --":
-                fila = df_preciario[df_preciario["Concepto"] == producto_sel].iloc[0]
-                concepto_val = producto_sel
+            if concepto_sel != "-- Selecciona un concepto --":
+                fila = df_preciario[df_preciario["Buscador"] == concepto_sel].iloc[0]
+                concepto_val = str(fila.get("Concepto", concepto_sel)).strip()
                 item_final = str(fila.get("item", "")).strip()
                 unidad_val = str(fila.get("Unidad", "Pieza")).strip()
                 
@@ -313,10 +304,8 @@ elif st.session_state.app_actual == "Cotizaciones":
 
     cx1, cx2, cx3, cx4 = st.columns([1, 1.5, 1.2, 1.2])
     cantidad = cx1.number_input("Cantidad", min_value=0.01, value=1.00)
-    
     opciones_unidad = ["Pieza", "Caja", "Metro", "Metro Lineal", "Kilo", "Metro Cuadrado (m2)", "Litro", "Servicio"]
     if unidad_val not in opciones_unidad and unidad_val != "": opciones_unidad.append(unidad_val)
-    
     tipo_unidad = cx2.selectbox("Unidad", opciones_unidad, index=opciones_unidad.index(unidad_val) if unidad_val in opciones_unidad else 0)
     costo_unitario = cx3.number_input("Costo U. ($)", min_value=0.0, value=float(costo_val), format="%.2f")
     
@@ -325,7 +314,7 @@ elif st.session_state.app_actual == "Cotizaciones":
     
     st.write("")
     if st.button("➕ Agregar Línea a Cotización", type="primary"):
-        if not concepto_val or concepto_val == "-- Selecciona un producto --":
+        if not concepto_val or concepto_val == "-- Selecciona un concepto --":
             st.error("❌ Por favor, ingresa o selecciona un concepto válido antes de continuar.")
         else:
             p_venta = costo_unitario * (1 + (margen_utilidad / 100))
@@ -424,8 +413,6 @@ elif st.session_state.app_actual == "Cotizaciones":
 # ==========================================
 elif st.session_state.app_actual == "Reportes":
     if st.button("⬅️ Volver al Menú Principal", key="v_rep"): cambiar_pantalla("Menu")
-    if LOGO_PATH is None:
-        st.warning("⚠️ Advertencia: No se encontró el archivo del logotipo en GitHub. El PDF se generará sin logotipo.")
 
     st.title("Generador de Reporte fotografico")
 
@@ -587,15 +574,81 @@ elif st.session_state.app_actual == "Reportes":
             st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
 
 # ==========================================
-# VISTAS 4 Y 5: MÓDULOS EN RESERVA
+# VISTA 4: LEVANTAMIENTO DE EQUIPOS (NUEVO)
 # ==========================================
 elif st.session_state.app_actual == "OtraApp":
     if st.button("⬅️ Volver al Menú Principal", key="v_otra1"): cambiar_pantalla("Menu")
-    st.title("🚀 Próxima Aplicación 1")
-    st.subheader("Módulo en Desarrollo 1")
+    st.title("📑 Levantamiento de Equipos")
+    st.subheader("Generación de evidencia desde listado centralizado en la nube")
     st.divider()
-    st.warning("Espacio reservado para tu siguiente automatización de flujos de trabajo.")
+    
+    df_equipos = cargar_listado_equipos()
+    
+    if df_equipos.empty:
+        st.warning("⚠️ No se detectaron equipos. Crea un archivo en Google Sheets llamado **Listado Equipos Besco** con las columnas: **TAG**, **Equipo**, y **Ubicacion**. Asegúrate de compartirlo con el correo del bot.")
+    else:
+        # Fusión para el buscador
+        if "TAG" in df_equipos.columns and "Equipo" in df_equipos.columns:
+            df_equipos["Buscador"] = df_equipos["TAG"].astype(str) + " - " + df_equipos["Equipo"].astype(str)
+        else:
+            df_equipos["Buscador"] = df_equipos.iloc[:, 0].astype(str)
+            
+        equipos_lista = ["-- Selecciona un equipo --"] + df_equipos["Buscador"].dropna().unique().tolist()
+        
+        st.markdown("### Selecciona el Activo a inspeccionar")
+        equipo_sel = st.selectbox("🔍 Buscar Equipo en Base de Datos", equipos_lista)
+        
+        if equipo_sel != "-- Selecciona un equipo --":
+            fila_eq = df_equipos[df_equipos["Buscador"] == equipo_sel].iloc[0]
+            
+            st.markdown("#### Datos del Levantamiento")
+            col1, col2, col3 = st.columns(3)
+            cliente_lev = col1.text_input("Cliente / Proyecto", value="Grupo Besco")
+            tecnico_lev = col2.text_input("Técnico Asignado", value="Gerardo Méndez")
+            fecha_lev = col3.date_input("Fecha de Inspección", date.today())
+            
+            st.info(f"**Equipo Seleccionado:** {fila_eq.get('Equipo', 'N/A')}  |  **TAG:** {fila_eq.get('TAG', 'N/A')}  |  **Ubicación:** {fila_eq.get('Ubicacion', 'N/A')}")
+            
+            actividades_lev = st.text_area("Observaciones o Actividades Realizadas en este equipo")
+            
+            col_f1, col_f2 = st.columns(2)
+            fotos_antes_lev = col_f1.file_uploader("📸 Fotos ANTES / HALLAZGO", accept_multiple_files=True, type=["jpg", "png", "jpeg"])
+            fotos_despues_lev = col_f2.file_uploader("📸 Fotos DESPUÉS / CORRECCIÓN", accept_multiple_files=True, type=["jpg", "png", "jpeg"])
+            
+            st.divider()
+            
+            if st.button("🚀 Generar PDF Individual del Equipo", type="primary"):
+                with st.spinner("Construyendo reporte del equipo..."):
+                    pdf_lev = BESCO_PDF()
+                    pdf_lev.add_page()
+                    
+                    pdf_lev.add_custom_section("Información de Inspección")
+                    pdf_lev.set_font('Arial', '', 10)
+                    pdf_lev.cell(0, 7, f"Cliente: {limpiar_texto(cliente_lev)} | Técnico: {limpiar_texto(tecnico_lev)}", 0, 1)
+                    pdf_lev.cell(0, 7, f"Fecha de Inspección: {fecha_lev.strftime('%d/%m/%Y')}", 0, 1)
+                    
+                    pdf_lev.add_custom_section("Datos del Activo")
+                    pdf_lev.set_font('Arial', 'B', 10)
+                    pdf_lev.cell(0, 7, f"TAG: {limpiar_texto(fila_eq.get('TAG', 'N/A'))} | Equipo: {limpiar_texto(fila_eq.get('Equipo', 'N/A'))}", 0, 1)
+                    pdf_lev.set_font('Arial', '', 10)
+                    pdf_lev.cell(0, 7, f"Ubicación: {limpiar_texto(fila_eq.get('Ubicacion', 'N/A'))}", 0, 1)
+                    
+                    if actividades_lev:
+                        pdf_lev.ln(2)
+                        pdf_lev.multi_cell(0, 6, f"Observaciones:\n{limpiar_texto(actividades_lev)}", 1)
+                        
+                    pdf_lev.photo_grid("Evidencia Fotográfica (Antes)", fotos_antes_lev, 1, "ant_lev")
+                    pdf_lev.photo_grid("Evidencia Fotográfica (Después)", fotos_despues_lev, 1, "desp_lev")
+                    
+                    pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
+                    nom_archivo_lev = f"Levantamiento_{limpiar_texto(fila_eq.get('TAG', 'Equipo'))}.pdf".replace(" ", "_")
+                    
+                    st.success(f"✅ Reporte individual para el equipo **{fila_eq.get('TAG', '')}** creado exitosamente.")
+                    st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
 
+# ==========================================
+# VISTA 5: MÓDULO EN RESERVA
+# ==========================================
 elif st.session_state.app_actual == "OtraApp2":
     if st.button("⬅️ Volver al Menú Principal", key="v_otra2"): cambiar_pantalla("Menu")
     st.title("🚀 Próxima Aplicación 2")
