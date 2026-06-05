@@ -72,7 +72,7 @@ def cargar_preciario_sodexo():
         return pd.DataFrame(sheet.get_all_records())
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=120) # Caché más corto para actualizar los equipos más rápido
+@st.cache_data(ttl=120)
 def cargar_listado_equipos():
     try:
         client = obtener_gspread_client()
@@ -183,7 +183,7 @@ with st.sidebar:
     st.divider()
     if st.button("📄 Cotizaciones", use_container_width=True): cambiar_pantalla("Cotizaciones")
     if st.button("📸 Reporte Fotográfico General", use_container_width=True): cambiar_pantalla("Reportes")
-    if st.button("📑 Levantamiento de Equipos", use_container_width=True): cambiar_pantalla("OtraApp")
+    if st.button("📑 Nestle", use_container_width=True): cambiar_pantalla("OtraApp")
     if st.button("🚀 Próxima Aplicación 2", use_container_width=True): cambiar_pantalla("OtraApp2")
 
 # ==========================================
@@ -208,9 +208,9 @@ if st.session_state.app_actual == "Menu":
     
     col3, col4 = st.columns(2)
     with col3:
-        st.markdown("### 📑 Levantamiento de Equipos")
+        st.markdown("### 📑 Nestle")
         st.caption("Búsqueda de activos desde base de datos en la nube y generación de reportes fotográficos por equipo.")
-        if st.button("Desplegar Levantamiento", use_container_width=True, type="primary"): cambiar_pantalla("OtraApp")
+        if st.button("Desplegar Nestle", use_container_width=True, type="primary"): cambiar_pantalla("OtraApp")
     with col4:
         st.markdown("### 🚀 Próxima Aplicación 2")
         st.caption("Segundo espacio en reserva configurado para la expansión de futuras herramientas del equipo.")
@@ -413,6 +413,8 @@ elif st.session_state.app_actual == "Cotizaciones":
 # ==========================================
 elif st.session_state.app_actual == "Reportes":
     if st.button("⬅️ Volver al Menú Principal", key="v_rep"): cambiar_pantalla("Menu")
+    if LOGO_PATH is None:
+        st.warning("⚠️ Advertencia: No se encontró el archivo del logotipo en GitHub. El PDF se generará sin logotipo.")
 
     st.title("Generador de Reporte fotografico")
 
@@ -574,11 +576,11 @@ elif st.session_state.app_actual == "Reportes":
             st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
 
 # ==========================================
-# VISTA 4: LEVANTAMIENTO DE EQUIPOS (NUEVO)
+# VISTA 4: NESTLE (LEVANTAMIENTO DE EQUIPOS)
 # ==========================================
 elif st.session_state.app_actual == "OtraApp":
     if st.button("⬅️ Volver al Menú Principal", key="v_otra1"): cambiar_pantalla("Menu")
-    st.title("📑 Levantamiento de Equipos")
+    st.title("📑 Nestle")
     st.subheader("Generación de evidencia desde listado centralizado en la nube")
     st.divider()
     
@@ -587,7 +589,6 @@ elif st.session_state.app_actual == "OtraApp":
     if df_equipos.empty:
         st.warning("⚠️ No se detectaron equipos. Crea un archivo en Google Sheets llamado **Listado Equipos Besco** con las columnas: **TAG**, **Equipo**, y **Ubicacion**. Asegúrate de compartirlo con el correo del bot.")
     else:
-        # Fusión para el buscador
         if "TAG" in df_equipos.columns and "Equipo" in df_equipos.columns:
             df_equipos["Buscador"] = df_equipos["TAG"].astype(str) + " - " + df_equipos["Equipo"].astype(str)
         else:
@@ -603,7 +604,7 @@ elif st.session_state.app_actual == "OtraApp":
             
             st.markdown("#### Datos del Levantamiento")
             col1, col2, col3 = st.columns(3)
-            cliente_lev = col1.text_input("Cliente / Proyecto", value="Grupo Besco")
+            cliente_lev = col1.text_input("Cliente / Proyecto", value="Nestlé")
             tecnico_lev = col2.text_input("Técnico Asignado", value="Gerardo Méndez")
             fecha_lev = col3.date_input("Fecha de Inspección", date.today())
             
@@ -641,7 +642,7 @@ elif st.session_state.app_actual == "OtraApp":
                     pdf_lev.photo_grid("Evidencia Fotográfica (Después)", fotos_despues_lev, 1, "desp_lev")
                     
                     pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
-                    nom_archivo_lev = f"Levantamiento_{limpiar_texto(fila_eq.get('TAG', 'Equipo'))}.pdf".replace(" ", "_")
+                    nom_archivo_lev = f"Nestle_{limpiar_texto(fila_eq.get('TAG', 'Equipo'))}.pdf".replace(" ", "_")
                     
                     st.success(f"✅ Reporte individual para el equipo **{fila_eq.get('TAG', '')}** creado exitosamente.")
                     st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
