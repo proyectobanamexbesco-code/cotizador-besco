@@ -76,13 +76,18 @@ def cargar_preciario_sodexo():
 def cargar_listado_equipos():
     try:
         client = obtener_gspread_client()
-        try: workbook = client.open("nestle")
-        except: workbook = client.open("Nestle")
+        # Búsqueda exacta en mayúsculas
+        try: workbook = client.open("NESTLE")
+        except:
+            try: workbook = client.open("nestle")
+            except: workbook = client.open("Nestle")
         
-        try: sheet = workbook.worksheet("nestle")
+        try: sheet = workbook.worksheet("NESTLE")
         except: 
-            try: sheet = workbook.worksheet("Nestle")
-            except: sheet = workbook.sheet1
+            try: sheet = workbook.worksheet("nestle")
+            except: 
+                try: sheet = workbook.worksheet("Nestle")
+                except: sheet = workbook.sheet1
             
         return pd.DataFrame(sheet.get_all_records())
     except: return pd.DataFrame()
@@ -592,12 +597,10 @@ elif st.session_state.app_actual == "OtraApp":
     df_equipos = cargar_listado_equipos()
     
     if df_equipos.empty:
-        st.warning("⚠️ No se detectaron equipos. Asegúrate de que tu archivo en Google Sheets se llame **nestle** (y su pestaña también **nestle**).")
+        st.warning("⚠️ No se detectaron equipos. Asegúrate de que tu archivo en Google Sheets se llame **NESTLE** (y su pestaña también **NESTLE**).")
     else:
-        # SÚPER LIMPIADOR DE COLUMNAS (Quita espacios fantasma y pone mayúsculas para evitar errores)
         df_equipos.columns = [str(c).strip().upper() for c in df_equipos.columns]
         
-        # Variables de columnas seguras
         col_item = "ITEM"
         col_desc = "DESCRIPCION DE EQUIPOS"
         col_area = "AREA"
@@ -606,7 +609,6 @@ elif st.session_state.app_actual == "OtraApp":
         if col_item in df_equipos.columns and col_desc in df_equipos.columns:
             df_equipos["Buscador"] = df_equipos[col_item].astype(str) + " - " + df_equipos[col_desc].astype(str)
         else:
-            # Si de plano no encuentra las columnas, usa la primera y la tercera como respaldo
             df_equipos["Buscador"] = df_equipos.iloc[:, 0].astype(str) + " - " + df_equipos.iloc[:, 2].astype(str)
             
         equipos_lista = ["-- Selecciona un equipo --"] + df_equipos["Buscador"].dropna().unique().tolist()
