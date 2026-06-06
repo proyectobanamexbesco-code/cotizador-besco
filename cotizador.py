@@ -111,6 +111,49 @@ def callback_guardar_cotizacion(df, folio, fecha_cot, nom_cli, inst_cli, dir_cli
     except Exception as e:
         st.session_state.mensaje_error = f"Error al conectar con Google Sheets: {str(e)}"
 
+def actualizar_fecha_nestle(item_val, fecha_str):
+    try:
+        client = obtener_gspread_client()
+        try: workbook = client.open("NESTLE")
+        except:
+            try: workbook = client.open("nestle")
+            except: workbook = client.open("Nestle")
+        
+        try: sheet = workbook.worksheet("NESTLE")
+        except: 
+            try: sheet = workbook.worksheet("nestle")
+            except: 
+                try: sheet = workbook.worksheet("Nestle")
+                except: sheet = workbook.sheet1
+
+        headers = sheet.row_values(1)
+        headers_upper = [str(h).strip().upper() for h in headers]
+        
+        if "ITEM" in headers_upper:
+            col_item_idx = headers_upper.index("ITEM") + 1
+            col_values = sheet.col_values(col_item_idx)
+            
+            # Buscar en qué fila se encuentra el ITEM
+            if str(item_val) in col_values:
+                row_idx = col_values.index(str(item_val)) + 1
+                
+                col_fecha_name = "FECHA DE MANTENIMIENTO"
+                # Si la columna ya existe, obtenemos su índice. Si no, la creamos al final.
+                if col_fecha_name in headers_upper:
+                    col_fecha_idx = headers_upper.index(col_fecha_name) + 1
+                else:
+                    col_fecha_idx = len(headers) + 1
+                    sheet.update_cell(1, col_fecha_idx, col_fecha_name)
+                    
+                # Escribimos la fecha en la celda cruzada (Fila del ITEM x Columna de Fecha)
+                sheet.update_cell(row_idx, col_fecha_idx, fecha_str)
+                # Limpiar caché para que la siguiente vez que busque, baje la tabla actualizada
+                cargar_listado_equipos.clear()
+                return True
+    except Exception as e:
+        return False
+    return False
+
 # ==========================================
 # CLASES Y FUNCIONES DE REPORTE FOTOGRÁFICO
 # ==========================================
@@ -660,14 +703,14 @@ elif st.session_state.app_actual == "OtraApp":
             
             st.divider()
             
-            # --- NUEVA SECCIÓN DE ENVÍO DE CORREO PARA NESTLE ---
             st.markdown("#### Envío de Reporte")
             dest_base_nestle = ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"]
             st.info(f"📧 Destinatarios automáticos: {', '.join(dest_base_nestle)}")
             correos_nestle = st.text_input("Correos adicionales (separados por coma)", key="mail_nestle")
             
-            if st.button("🚀 Generar y Enviar PDF Individual", type="primary"):
-                with st.spinner("Construyendo reporte del equipo y enviando correo..."):
+            if st.button("🚀 Generar PDF, Enviar y Actualizar Base de Datos", type="primary"):
+                with st.spinner("Construyendo reporte, enviando correo y actualizando fecha..."):
+                    # 1. GENERACIÓN DEL PDF
                     pdf_lev = BESCO_PDF()
                     pdf_lev.add_page()
                     
@@ -692,7 +735,7 @@ elif st.session_state.app_actual == "OtraApp":
                     pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
                     nom_archivo_lev = f"Nestle_{limpiar_texto(item_lev)}.pdf".replace(" ", "_")
                     
-                    # Llamada a la función de correo
+                    # 2. ENVÍO DE CORREO
                     correo_enviado = enviar_correo(
                         pdf_bytes=pdf_bytes_lev,
                         cliente=limpiar_texto(cliente_lev),
@@ -705,10 +748,19 @@ elif st.session_state.app_actual == "OtraApp":
                         destinatarios_base=dest_base_nestle
                     )
                     
+                    # 3. ACTUALIZACIÓN DE FECHA EN GOOGLE SHEETS
+                    fecha_str_corta = fecha_lev.strftime('%d/%m/%Y')
+                    fecha_actualizada = actualizar_fecha_nestle(item_lev, fecha_str_corta)
+                    
                     if correo_enviado:
-                        st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado y ENVIADO POR CORREO exitosamente.")
+                        st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado y ENVIADO POR CORREO.")
                     else:
                         st.warning(f"⚠️ Reporte creado para **{item_lev}**, pero hubo un problema al enviarlo por correo. Descárgalo abajo:")
+                        
+                    if fecha_actualizada:
+                        st.success(f"📝 Base de datos actualizada: El equipo **{item_lev}** se registró con mantenimiento el **{fecha_str_corta}**.")
+                    else:
+                        st.error(f"❌ No se pudo actualizar la fecha en la base de datos para el equipo **{item_lev}**.")
                         
                     st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
 
