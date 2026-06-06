@@ -1,1 +1,43 @@
+import streamlit as st
+import pandas as pd
+from utils import obtener_gspread_client
+from datetime import date
 
+st.title("📄 Cotizaciones")
+
+# --- LÓGICA DE LA APP ---
+def cargar_preciario():
+    try:
+        client = obtener_gspread_client()
+        # Ajusta aquí el nombre de tu hoja de cálculo real
+        workbook = client.open("PRECIARIO_SODEXO") 
+        sheet = workbook.sheet1
+        return pd.DataFrame(sheet.get_all_records())
+    except Exception as e:
+        st.error(f"Error al cargar el preciario: {e}")
+        return pd.DataFrame()
+
+# Carga de datos
+df_precios = cargar_preciario()
+
+if not df_precios.empty:
+    st.subheader("Selección de Conceptos")
+    
+    # Ejemplo de formulario para cotizar
+    cliente = st.text_input("Nombre del Cliente")
+    conceptos = st.multiselect("Selecciona conceptos del preciario", df_precios["DESCRIPCION"].tolist())
+    
+    if st.button("Generar Cotización"):
+        if cliente and conceptos:
+            st.success(f"Cotización generada para {cliente}")
+            # Aquí iría tu lógica de FPDF para generar el PDF de la cotización
+            # utilizando la clase BESCO_PDF de utils.py
+        else:
+            st.warning("Por favor completa los campos.")
+else:
+    st.info("El preciario está vacío o no se pudo conectar.")
+
+# --- NAVEGACIÓN ---
+st.divider()
+if st.button("⬅ Volver al Inicio"):
+    st.switch_page("cotizador.py")
