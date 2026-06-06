@@ -469,4 +469,303 @@ elif st.session_state.app_actual == "Reportes":
     st.subheader("1. Identificación General del Servicio")
     c_g1, c_g2, c_g3 = st.columns([2, 1, 1.5])
     cliente = c_g1.text_input("Cliente")
-    folio = c_g2.text
+    folio = c_g2.text_input("Folio / OT / TK", max_chars=20)
+    fecha_ejecucion = c_g3.date_input("Fecha de Ejecución", datetime.now())
+
+    col_loc1, col_loc2 = st.columns(2)
+    sucursal = col_loc1.text_input("Sucursal / Inmueble")
+    lista_oficinas = ["Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", "Ben & Company", "BX+", "Emerson", "Odoo", "Tampico"]
+    oficina = col_loc2.selectbox("Oficina Responsable", lista_oficinas)
+
+    c_t1, c_t2, c_t3, c_t4 = st.columns(4)
+    tecnico = c_t1.text_input("Técnico Asignado")
+    supervisor = c_t2.text_input("Supervisor")
+    tipo_serv = c_t3.selectbox("Servicio", ["Preventivo", "Correctivo", "Emergencia"])
+    referencia = c_t4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
+
+    st.markdown("---")
+    st.subheader("2. Evidencia Documental")
+    archivos_folio = st.file_uploader("Subir Folio BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
+
+    st.markdown("---")
+    st.subheader("3. Equipos a Reportar")
+    num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
+
+    equipos_data = []
+    for i in range(num_equipos):
+        with st.expander(f"CONFIGURACIÓN EQUIPO {i+1}", expanded=True):
+            cols_cat = st.columns(2)
+            categorias_opciones = ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Conservación", "Hidrosanitario", "Iluminación", "Otros"]
+            esp = cols_cat[0].selectbox("Categoría", categorias_opciones, key=f"esp_{i}")
+            estatus = cols_cat[1].selectbox("Estatus Final", ["Operando correctamente", "Operando con observaciones", "No queda operando"], key=f"est_{i}")
+            
+            meds, otros = {}, ""
+            if esp == "Aire Acondicionado":
+                cols = st.columns(4)
+                meds['Succión'] = cols[0].text_input("Succión", key=f"s_{i}")
+                meds['Descarga'] = cols[1].text_input("Descarga", key=f"d_{i}")
+                meds['Salida'] = cols[2].text_input("Salida", key=f"t_{i}")
+                meds['Amperaje'] = cols[3].text_input("Amp", key=f"a_{i}")
+            elif esp == "Otros":
+                otros = st.text_area("Detalles/Mediciones:", key=f"o_{i}")
+                
+            ca1, ca2, ca3 = st.columns(3)
+            tag = ca1.text_input("TAG", key=f"tg_{i}")
+            marca = ca2.text_input("Marca", key=f"mr_{i}")
+            cap = ca3.text_input("Capacidad", key=f"cp_{i}")
+            
+            actividades = st.text_area("Actividades Realizadas", key=f"act_{i}")
+            com = st.text_area("Comentarios Extras", key=f"com_{i}")
+            fa = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}")
+            fd = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
+            
+            equipos_data.append({
+                "numero": i+1, "esp": esp, "estatus": estatus, "actividades": actividades, 
+                "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, 
+                "com": com, "fa": fa, "fd": fd
+            })
+
+    st.subheader("4. Materiales Utilizados")
+    df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
+
+    st.markdown("---")
+    st.subheader("5. Envío de Reporte")
+    
+    mapeo_correos = {
+        "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
+        "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
+        "Pachuca": ["german.constantino@besco.mx"],
+        "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
+        "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
+        "CDMX": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+        "Ben & Company": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+        "BX+": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+        "Emerson": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+        "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"],
+        "Tampico": ["ingrid.lucio@besco.mx", "joel.perez@besco.mx", "gerardo.mendez@besco.mx"]
+    }
+    
+    dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
+    if "gerardo.mendez@besco.mx" not in dest_oficina: dest_oficina.append("gerardo.mendez@besco.mx")
+    
+    st.info(f"📧 Destinatarios automáticos: {', '.join(dest_oficina)}")
+    correos_extra = st.text_input("Correos adicionales (separados por coma)")
+
+    if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
+        with st.spinner("Procesando documento y enviando correos..."):
+            pdf_reporte = BESCO_PDF()
+            pdf_reporte.add_page()
+            
+            pdf_reporte.add_custom_section("Información General")
+            pdf_reporte.set_font('Arial', '', 10)
+            pdf_reporte.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
+            f_ejec_str = fecha_ejecucion.strftime('%d/%m/%Y')
+            pdf_reporte.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
+            if sucursal: pdf_reporte.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
+            pdf_reporte.set_font('Arial', 'B', 10)
+            pdf_reporte.cell(0, 7, f"Técnico: {tecnico} | Supervisor: {supervisor}", 0, 1)
+            pdf_reporte.set_font('Arial', '', 10)
+            pdf_reporte.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf_reporte.ln(5)
+
+            for eq in equipos_data:
+                if pdf_reporte.get_y() > 240: pdf_reporte.add_page()
+                pdf_reporte.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
+                pdf_reporte.set_font('Arial', 'B', 10)
+                pdf_reporte.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
+                pdf_reporte.set_font('Arial', '', 10)
+                
+                valid_meds = {k: v for k, v in eq['meds'].items() if v}
+                for k, v in valid_meds.items(): 
+                    pdf_reporte.cell(60, 6, f"{k}:", 1); pdf_reporte.cell(130, 6, f"{v}", 1, 1)
+                if eq['otros']: pdf_reporte.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
+                    
+                if eq['tag'] or eq['marca'] or eq['cap']: 
+                    pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1); pdf_reporte.set_font('Arial', '', 10)
+                
+                if eq['actividades']: pdf_reporte.multi_cell(0, 6, f"Actividades Realizadas:\n{eq['actividades']}", 1)
+                if eq['com']: pdf_reporte.multi_cell(0, 6, f"Comentarios Extras:\n{eq['com']}", 1)
+                    
+                pdf_reporte.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'], "antes")
+                pdf_reporte.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'], "despues")
+                pdf_reporte.ln(5)
+
+            df_c = df_mat.dropna(subset=["Descripción"])
+            if not df_c.empty:
+                if pdf_reporte.get_y() > 220: pdf_reporte.add_page()
+                pdf_reporte.add_custom_section("Materiales Utilizados")
+                pdf_reporte.set_font('Arial', 'B', 9); pdf_reporte.cell(30, 7, "CANT.", 1, 0, 'C'); pdf_reporte.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C'); pdf_reporte.set_font('Arial', '', 9)
+                for _, row in df_c.iterrows(): pdf_reporte.cell(30, 7, str(row["Cantidad"]), 1); pdf_reporte.cell(160, 7, str(row["Descripción"]), 1, 1)
+
+            fotos_folio = [f for f in archivos_folio if f and "image" in f.type]
+            if fotos_folio: pdf_reporte.folio_grid("FOLIO BESCO", fotos_folio)
+
+            pdf_bytes = pdf_reporte.output(dest='S').encode('latin-1')
+            
+            pdfs_folio = [f for f in archivos_folio if f and f.type == "application/pdf"]
+            if pdfs_folio:
+                merger = PdfWriter()
+                merger.append(io.BytesIO(pdf_bytes))
+                for p in pdfs_folio: 
+                    p.seek(0) 
+                    merger.append(p)
+                out = io.BytesIO()
+                merger.write(out)
+                pdf_bytes = out.getvalue()
+                
+            nom_archivo = f"Reporte_BESCO_{cliente}_{folio}.pdf".replace(" ", "_")
+            
+            correo_enviado = enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nom_archivo, correos_extra, f_ejec_str, dest_oficina)
+            
+            if correo_enviado:
+                st.success("✅ Reporte generado y ENVIADO POR CORREO exitosamente.")
+            else:
+                st.warning("⚠️ El PDF se generó correctamente, pero hubo un problema al enviarlo por correo. Descárgalo aquí abajo:")
+                
+            st.download_button("📥 Descargar PDF de Evidencia", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf", use_container_width=True)
+
+# ==========================================
+# VISTA 4: NESTLE (LEVANTAMIENTO DE EQUIPOS)
+# ==========================================
+elif st.session_state.app_actual == "OtraApp":
+    if st.button("⬅️ Volver al Menú Principal", key="v_otra1"): cambiar_pantalla("Menu")
+    st.title("📑 Nestle")
+    st.subheader("Generación de evidencia desde listado centralizado en la nube")
+    st.divider()
+    
+    df_equipos = cargar_listado_equipos()
+    
+    if df_equipos.empty:
+        st.warning("⚠️ No se detectaron equipos. Asegúrate de que tu archivo en Google Sheets se llame **NESTLE** (y su pestaña también **NESTLE**).")
+    else:
+        df_equipos.columns = [str(c).strip().upper() for c in df_equipos.columns]
+        
+        col_item = "ITEM"
+        col_desc = "DESCRIPCION DE EQUIPOS"
+        col_area = "AREA"
+        col_frec = "FRECUENCIA"
+        
+        if col_item in df_equipos.columns and col_desc in df_equipos.columns:
+            df_equipos["Buscador"] = df_equipos[col_item].astype(str) + " - " + df_equipos[col_desc].astype(str)
+        else:
+            df_equipos["Buscador"] = df_equipos.iloc[:, 0].astype(str) + " - " + df_equipos.iloc[:, 2].astype(str)
+            
+        st.markdown("### 1. Filtro por Área")
+        
+        if col_area in df_equipos.columns:
+            areas_lista = ["-- Todas las Áreas --"] + sorted(df_equipos[col_area].dropna().astype(str).unique().tolist())
+            area_sel = st.selectbox("📍 Selecciona el Área (Opcional)", areas_lista)
+            
+            if area_sel != "-- Todas las Áreas --":
+                df_filtrado = df_equipos[df_equipos[col_area].astype(str) == area_sel]
+            else:
+                df_filtrado = df_equipos
+        else:
+            df_filtrado = df_equipos
+            st.warning("⚠️ No se encontró la columna 'AREA' para filtrar.")
+            
+        st.markdown("### 2. Selecciona el Activo a inspeccionar")
+        equipos_lista = ["-- Selecciona un equipo --"] + df_filtrado["Buscador"].dropna().unique().tolist()
+        
+        equipo_sel = st.selectbox("🔍 Buscar Equipo en Base de Datos", equipos_lista)
+        
+        if equipo_sel != "-- Selecciona un equipo --":
+            fila_eq = df_filtrado[df_filtrado["Buscador"] == equipo_sel].iloc[0]
+            
+            val_desc = fila_eq.get(col_desc, 'N/A')
+            val_item = fila_eq.get(col_item, 'N/A')
+            val_area = fila_eq.get(col_area, 'N/A')
+            val_frec = fila_eq.get(col_frec, 'N/A')
+            
+            st.info(f"**Equipo Seleccionado:** {val_desc}")
+            
+            st.markdown("#### Datos Generales")
+            col1, col2, col3 = st.columns(3)
+            cliente_lev = col1.text_input("Cliente / Proyecto", value="Nestlé")
+            tecnico_lev = col2.text_input("Técnico Asignado", value="Oscar Salto")
+            fecha_lev = col3.date_input("Fecha de Inspección", date.today())
+            
+            st.markdown("#### Detalles Técnicos del Equipo")
+            col4, col5, col6 = st.columns(3)
+            item_lev = col4.text_input("ITEM", value=str(val_item))
+            area_lev = col5.text_input("Área Asignada", value=str(val_area))
+            frecuencia_lev = col6.text_input("Frecuencia de Mantenimiento", value=str(val_frec))
+            
+            actividades_lev = st.text_area("Observaciones o Actividades Realizadas en este equipo")
+            
+            col_f1, col_f2 = st.columns(2)
+            fotos_antes_lev = col_f1.file_uploader("📸 Fotos ANTES / HALLAZGO", accept_multiple_files=True, type=["jpg", "png", "jpeg"])
+            fotos_despues_lev = col_f2.file_uploader("📸 Fotos DESPUÉS / CORRECCIÓN", accept_multiple_files=True, type=["jpg", "png", "jpeg"])
+            
+            st.divider()
+            
+            st.markdown("#### Envío de Reporte")
+            # Lista de destinatarios incluyendo tu cuenta central de supervisión
+            dest_base_nestle = ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx", "gerardo.mendez@besco.mx"]
+            st.info(f"📧 Destinatarios automáticos: {', '.join(dest_base_nestle)}")
+            correos_nestle = st.text_input("Correos adicionales (separados por coma)", key="mail_nestle")
+            
+            if st.button("🚀 Generar PDF, Enviar y Actualizar Base de Datos", type="primary"):
+                with st.spinner("Construyendo reporte, enviando correo y actualizando fecha..."):
+                    # 1. GENERACIÓN DEL PDF
+                    pdf_lev = BESCO_PDF()
+                    pdf_lev.add_page()
+                    
+                    pdf_lev.add_custom_section("Información de Inspección")
+                    pdf_lev.set_font('Arial', '', 10)
+                    pdf_lev.cell(0, 7, f"Cliente: {limpiar_texto(cliente_lev)} | Técnico: {limpiar_texto(tecnico_lev)}", 0, 1)
+                    pdf_lev.cell(0, 7, f"Fecha de Inspección: {fecha_lev.strftime('%d/%m/%Y')}", 0, 1)
+                    
+                    pdf_lev.add_custom_section("Datos del Activo")
+                    pdf_lev.set_font('Arial', 'B', 10)
+                    pdf_lev.cell(0, 7, f"ITEM: {limpiar_texto(item_lev)} | Equipo: {limpiar_texto(str(val_desc))}", 0, 1)
+                    pdf_lev.set_font('Arial', '', 10)
+                    pdf_lev.cell(0, 7, f"Área: {limpiar_texto(area_lev)} | Frecuencia: {limpiar_texto(frecuencia_lev)}", 0, 1)
+                    
+                    if actividades_lev:
+                        pdf_lev.ln(2)
+                        pdf_lev.multi_cell(0, 6, f"Observaciones:\n{limpiar_texto(actividades_lev)}", 1)
+                        
+                    pdf_lev.photo_grid("Evidencia Fotográfica (Antes)", fotos_antes_lev, 1, "ant_lev")
+                    pdf_lev.photo_grid("Evidencia Fotográfica (Después)", fotos_despues_lev, 1, "desp_lev")
+                    
+                    pdf_bytes_lev = pdf_lev.output(dest='S').encode('latin-1')
+                    nom_archivo_lev = f"Nestle_{limpiar_texto(item_lev)}.pdf".replace(" ", "_")
+                    
+                    # 2. ENVÍO DE CORREO
+                    correo_enviado = enviar_correo(
+                        pdf_bytes=pdf_bytes_lev,
+                        cliente=limpiar_texto(cliente_lev),
+                        folio=limpiar_texto(item_lev),
+                        sucursal=limpiar_texto(area_lev),
+                        office="Proyecto Nestlé",
+                        nombre_archivo=nom_archivo_lev,
+                        corr_extra=correos_nestle,
+                        f_ejec=fecha_lev.strftime('%d/%m/%Y'),
+                        destinatarios_base=dest_base_nestle
+                    )
+                    
+                    # 3. ACTUALIZACIÓN DE FECHA EN GOOGLE SHEETS
+                    fecha_str_corta = fecha_lev.strftime('%d/%m/%Y')
+                    fecha_actualizada = actualizar_fecha_nestle(item_lev, fecha_str_corta)
+                    
+                    if correo_enviado:
+                        st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado y ENVIADO POR CORREO.")
+                    else:
+                        st.warning(f"⚠️ Reporte creado para **{item_lev}**, pero hubo un problema al enviarlo por correo. Descárgalo abajo:")
+                        
+                    if fecha_actualizada:
+                        st.success(f"📝 Base de datos actualizada: El equipo **{item_lev}** se registró con mantenimiento el **{fecha_str_corta}**.")
+                    else:
+                        st.error(f"❌ No se pudo actualizar la fecha en la base de datos para el equipo **{item_lev}**.")
+                        
+                    st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
+
+# ==========================================
+# VISTA 5: MÓDULO EN RESERVA
+# ==========================================
+elif st.session_state.app_actual == "OtraApp2":
+    if st.button("⬅️ Volver al Menú Principal", key="v_otra2"): cambiar_pantalla("Menu")
+    st.title("🚀 Próxima Aplicación 2")
+    st.subheader("Módulo en Desarrollo 2")
+    st.divider()
+    st.warning("Segundo espacio en reserva listo para recibir código e integraciones operativas futuras.")
