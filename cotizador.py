@@ -11,6 +11,7 @@ from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
 from PIL import Image
+import google.generativeai as genai  # <-- NUEVA LIBRERÍA PARA GEMINI
 
 # --- CONFIGURACIÓN DE PÁGINA TRUNK ---
 st.set_page_config(page_title="Panel de soluciones Grupo Besco", layout="wide")
@@ -148,6 +149,33 @@ def actualizar_fecha_nestle(item_val, fecha_str):
     except:
         return False
     return False
+
+# --- NUEVA FUNCIÓN AUTOMÁTICA DE IA (GEMINI) ---
+def analizar_reporte_con_gemini(cliente, tecnico, fecha, item, area, frecuencia, observaciones):
+    try:
+        if "GEMINI_API_KEY" not in st.secrets:
+            return "⚠️ IA Desconectada: Configura 'GEMINI_API_KEY' en tus Secrets de Streamlit."
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        Actúa como un Ingeniero de Mantenimiento Experto y supervisor técnico senior de la empresa Grupo Besco.
+        Analiza los siguientes datos recolectados en campo sobre este activo técnico y emite un Resumen Ejecutivo de Diagnóstico Breve (máximo 2 párrafos). 
+        Usa viñetas para destacar puntos críticos o hallazgos si es necesario. Mantén un lenguaje altamente corporativo, técnico y claro.
+
+        INFORMACIÓN COMPILADA:
+        - Inmueble/Cliente: {cliente}
+        - Personal Técnico en Campo: {tecnico}
+        - Fecha del Servicio: {fecha}
+        - Identificador Único (ITEM): {item}
+        - Zona de Trabajo / Área: {area}
+        - Frecuencia Planificada: {frecuencia}
+        - Observaciones y Actividades del Técnico: {observaciones}
+        """
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ Error al procesar el análisis con Gemini: {str(e)}"
 
 # ==========================================
 # CLASES Y FUNCIONES DE REPORTE FOTOGRÁFICO
@@ -614,7 +642,7 @@ elif st.session_state.app_actual == "Reportes":
                 
             nom_archivo = f"Reporte_BESCO_{cliente}_{folio}.pdf".replace(" ", "_")
             
-            correo_enviado = enviar_correo(pdf_bytes, cliente, folio, sucursal, office, nom_archivo, correos_extra, f_ejec_str, dest_oficina)
+            correo_enviado = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nom_archivo, correos_extra, f_ejec_str, dest_oficina)
             
             if correo_enviado:
                 st.success("✅ Reporte generado y ENVIADO POR CORREO exitosamente.")
@@ -699,7 +727,6 @@ elif st.session_state.app_actual == "OtraApp":
             st.divider()
             
             st.markdown("#### Envío de Reporte")
-            # Lista de destinatarios incluyendo tu cuenta central de supervisión
             dest_base_nestle = ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx", "gerardo.mendez@besco.mx"]
             st.info(f"📧 Destinatarios automáticos: {', '.join(dest_base_nestle)}")
             correos_nestle = st.text_input("Correos adicionales (separados por coma)", key="mail_nestle")
@@ -748,6 +775,7 @@ elif st.session_state.app_actual == "OtraApp":
                     fecha_str_corta = fecha_lev.strftime('%d/%m/%Y')
                     fecha_actualizada = actualizar_fecha_nestle(item_lev, fecha_str_corta)
                     
+                    # --- MENSAJES DE ÉXITO O ADVERTENCIA ---
                     if correo_enviado:
                         st.success(f"✅ Reporte individual para el equipo **{item_lev}** creado y ENVIADO POR CORREO.")
                     else:
@@ -757,6 +785,22 @@ elif st.session_state.app_actual == "OtraApp":
                         st.success(f"📝 Base de datos actualizada: El equipo **{item_lev}** se registró con mantenimiento el **{fecha_str_corta}**.")
                     else:
                         st.error(f"❌ No se pudo actualizar la fecha en la base de datos para el equipo **{item_lev}**.")
+                    
+                    # --- NUEVA SECCIÓN DE ANÁLISIS DE GEMINI EN PANTALLA ---
+                    st.markdown("---")
+                    st.markdown("### 🤖 Resumen Técnico de Inteligencia Artificial (Gemini)")
+                    with st.spinner("Gemini está analizando los hallazgos técnicos del reporte..."):
+                        resumen_ia = analizar_reporte_con_gemini(
+                            cliente=cliente_lev, 
+                            tecnico=tecnico_lev, 
+                            fecha=fecha_str_corta, 
+                            item=item_lev, 
+                            area=area_lev, 
+                            frecuencia=frecuencia_lev, 
+                            observaciones=actividades_lev
+                        )
+                        st.info(resumen_ia)
+                    st.markdown("---")
                         
                     st.download_button("📥 Descargar Reporte del Equipo", data=pdf_bytes_lev, file_name=nom_archivo_lev, mime="application/pdf", use_container_width=True)
 
