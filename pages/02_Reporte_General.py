@@ -1,23 +1,32 @@
 import streamlit as st
-import sys
+import pandas as pd
+from fpdf import FPDF
+from datetime import datetime
+from PIL import Image
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils import BESCO_PDF, enviar_correo
+import smtplib
+from email.message import EmailMessage
+import io
+import uuid
+from pypdf import PdfWriter
 
-st.title("📸 Reporte Fotográfico General")
+# --- RUTAS PARA EL LOGOTIPO BESCO (MEJORADO PARA LA NUBE) ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_LOGO_PATH = r"C:\Users\GerardoMendez\OneDrive - Grupo Besco\Escritorio\MisProyectos\logo.png"
+CLOUD_LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+CLOUD_LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
+CLOUD_LOGO_BESCO = os.path.join(BASE_DIR, "logo besco 2026.jpeg") # ¡Corregido a "logo"!
 
-cliente = st.text_input("Cliente")
-folio = st.text_input("Folio")
-fa = st.file_uploader("Fotos Antes", accept_multiple_files=True)
-fd = st.file_uploader("Fotos Después", accept_multiple_files=True)
+if os.path.exists(LOCAL_LOGO_PATH):
+    LOGO_PATH = LOCAL_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_PATH):
+    LOGO_PATH = CLOUD_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_JPG):
+    LOGO_PATH = CLOUD_LOGO_JPG
+elif os.path.exists(CLOUD_LOGO_BESCO):
+    LOGO_PATH = CLOUD_LOGO_BESCO
+else:
+    LOGO_PATH = None
 
-if st.button("Generar y Enviar"):
-    pdf = BESCO_PDF()
-    pdf.add_page()
-    pdf.cell(0, 10, f"Reporte: {cliente}", ln=True)
-    pdf.photo_grid("Antes", fa)
-    pdf.photo_grid("Después", fd)
-    pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    
-    if enviar_correo(pdf_bytes, cliente, folio, "Reporte.pdf", "", ["gerardo.mendez@besco.mx"]):
-        st.success("Reporte enviado")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="BESCO | Evidencia Técnica", layout="wide")
