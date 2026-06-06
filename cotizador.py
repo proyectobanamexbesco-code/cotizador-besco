@@ -11,7 +11,7 @@ from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
 from PIL import Image
-import google.generativeai as genai  # <-- NUEVA LIBRERÍA PARA GEMINI
+import google.generativeai as genai
 
 # --- CONFIGURACIÓN DE PÁGINA TRUNK ---
 st.set_page_config(page_title="Panel de soluciones Grupo Besco", layout="wide")
@@ -150,13 +150,14 @@ def actualizar_fecha_nestle(item_val, fecha_str):
         return False
     return False
 
-# --- NUEVA FUNCIÓN AUTOMÁTICA DE IA (GEMINI) ---
+# --- FUNCIÓN AUTOMÁTICA DE IA (GEMINI) ACTUALIZADA ---
 def analizar_reporte_con_gemini(cliente, tecnico, fecha, item, area, frecuencia, observaciones):
     try:
         if "GEMINI_API_KEY" not in st.secrets:
             return "⚠️ IA Desconectada: Configura 'GEMINI_API_KEY' en tus Secrets de Streamlit."
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Actualizado al sufijo -latest para garantizar compatibilidad con la API
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         prompt = f"""
         Actúa como un Ingeniero de Mantenimiento Experto y supervisor técnico senior de la empresa Grupo Besco.
@@ -727,6 +728,7 @@ elif st.session_state.app_actual == "OtraApp":
             st.divider()
             
             st.markdown("#### Envío de Reporte")
+            # Lista de destinatarios incluyendo tu cuenta central de supervisión
             dest_base_nestle = ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx", "gerardo.mendez@besco.mx"]
             st.info(f"📧 Destinatarios automáticos: {', '.join(dest_base_nestle)}")
             correos_nestle = st.text_input("Correos adicionales (separados por coma)", key="mail_nestle")
