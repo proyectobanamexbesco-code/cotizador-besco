@@ -5,4 +5,4 @@ gspread
 google-auth
 Pillow
 pypdf
-GEMINI_API_KEY = "AIzaSyTuLlaveRealDeGeminiAqui"
+google-generativeai
